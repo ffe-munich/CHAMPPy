@@ -263,9 +263,6 @@ class Parameterizer:
             mask_weekdays = ref_data_df_ext["weekday"].isin(weekdays)
             ref_data_df_ext_filtered = ref_data_df_ext[mask_cluster & mask_weekdays]
 
-            if idx == 5:
-                test = 1
-
             # Calculate parameters for this cluster and weekdays
             self._calc_parameters_for_idx(ref_data_ext = ref_data_df_ext_filtered, idx=idx)
     
@@ -314,13 +311,13 @@ class Parameterizer:
 
         # Determine counts of timesteps without transitions between locations: vehicle stays at same location
         starts = ref_data_ext["start_index"].values
-        ends = ref_data_ext["end_index"].values
-        ends[ends == 0] = n_steps_per_day-1  # handle end index 0 as last index
+        ends = ref_data_ext["end_index"].values-1
+        ends[ends < 0] = n_steps_per_day-1  # handle end index 0 as last index
         locs = ref_data_ext["location"].values
-        lengths = ends - starts 
+        lengths = ends - starts + 1 
         mask = lengths > 0
         if np.any(mask):
-            all_day_indices = np.concatenate([np.arange(s, e) for s, e in zip(starts[mask], ends[mask])])
+            all_day_indices = np.concatenate([np.arange(s, e+1) for s, e in zip(starts[mask], ends[mask])])
             all_locs = np.repeat(locs[mask], lengths[mask])
             records = np.column_stack((all_day_indices, all_locs, all_locs))
             non_trans_df = pd.DataFrame(records, columns=["day_index", "start_loc", "end_loc"])
