@@ -1,17 +1,52 @@
 import pandas as pd
-import numpy as np
-from typing import Literal, Tuple, Optional
 import pandera.pandas as pa
 from pandera.typing import Series
 import logging
-from pydantic import validate_call, ConfigDict
+from typing import Literal
+from pydantic import validate_call
+from champpy.utils.data_utils import Event
+
+# Basisklasse für Mobility-Komponenten
+import pandas as pd
+
+class BaseMobilityComponent:
+	_schema = None  # In Subklassen überschreiben
+
+	def __init__(self, input_df: pd.DataFrame = None, frozen: bool = False):
+		self._df = None
+		self._frozen = frozen
+		if input_df is not None:
+			self.df = input_df
+
+	@property
+	def df(self) -> pd.DataFrame:
+		if self._df is None:
+			return pd.DataFrame()
+		return self._df.copy()
+
+	@df.setter
+	def df(self, value: pd.DataFrame):
+		self._check_frozen()
+		if self._schema is not None:
+			self._df = self._schema.validate(value)
+		else:
+			self._df = value
+
+	@property
+	def is_empty(self) -> bool:
+		return self._df is None or self._df.empty
+
+	def _check_frozen(self):
+		if self._frozen:
+			raise AttributeError("This instance is frozen and cannot be modified.")
 
 # Configure logger for this module
 logger = logging.getLogger(__name__)
-		
 
+
+		
 class LogbooksSchema(pa.DataFrameModel):
-	"""Pandera schema for Logbook Dataframe validation."""
+	"""Pandera schema for Logbooks Dataframe validation."""
 	
 	id_journey: int = pa.Field(ge=1, coerce=True)
 	id_vehicle: int = pa.Field(ge=1, coerce=True)
@@ -59,7 +94,7 @@ class Logbooks:
 
 	def __init__(self,  input_df: pd.DataFrame = None, frozen: bool = False):
 		"""
-		Initialize a Logbook object.
+		Initialize a Logbooks object.
 		
 		Parameters
 		----------
@@ -74,7 +109,7 @@ class Logbooks:
 			- arr_loc: str
 			- distance: float
 		frozen : bool, optional
-			If True, the Logbook instance is immutable after creation. Default is False.
+			If True, the Logbooks instance is immutable after creation. Default is False.
 		"""
 		self._df = None
 		self._frozen = frozen
@@ -206,7 +241,7 @@ class Logbooks:
 		LogbooksSchema.validate(input_df)
 
 		if self._df is None or self._df.empty:
-			message = "Logbook is empty. Cannot update journeys of Logbook."
+			message = "Logbooks are empty. Cannot update journeys of Logbooks."
 			logger.error(message)
 			raise ValueError(message)
 		
@@ -286,17 +321,17 @@ class Logbooks:
 		self._df = self._df.loc[~mask].copy().reset_index(drop=True)
 		
 		if reindex:
-			self.reindexing(type="all")
+			self._reindexing(type="all")
 
 	def _check_frozen(self) -> bool:
-		"""Check if the Logbook instance is frozen (immutable)."""
+		"""Check if the Logbooks instance is frozen (immutable)."""
 		if self._frozen == True:
-			message = "This Logbook instance is frozen and cannot be modified."
+			message = "This Logbooks instance is frozen and cannot be modified."
 			logger.error(message)
 			raise AttributeError(message)
 	
 	@validate_call
-	def reindexing(self, type:Literal["all", "id_journey", "id_vehicle"] = "all") -> None:
+	def _reindexing(self, type:Literal["all", "id_journey", "id_vehicle"] = "all") -> None:
 		"""
 		Reindex id_vehicle and/or id_journey columns.
 		
@@ -445,13 +480,14 @@ class Logbooks:
 		# set agregated df as logbook df
 		self.df = agg_df
 
+
 class VehiclesSchema(pa.DataFrameModel):
-	"""Pandera schema for Vehicle Dataframe validation."""
+	"""Pandera schema for Vehicles Dataframe validation."""
 	
 	id_vehicle: int = pa.Field(ge=1, coerce=True)
 	first_day: pa.DateTime = pa.Field(coerce=True)
 	last_day: pa.DateTime = pa.Field(coerce=True)
-	cluster: int = pa.Field(ge=0, coerce=True,  default=1)
+	id_cluster: int = pa.Field(ge=1, coerce=True,  default=1)
 	first_loc: Series[pd.Int64Dtype] = pa.Field(ge=1, nullable=True, coerce=True, default=None)
 	
 	class Config:
@@ -485,7 +521,7 @@ class Vehicles:
 
 	def __init__(self, input_df: pd.DataFrame = None, frozen: bool = False):
 		"""
-		Initialize a Vehicle object.
+		Initialize a Vehiclesobject.
 		
 		Parameters
 		----------
@@ -495,15 +531,17 @@ class Vehicles:
 			- id_vehicle: int
 			- first_day: datetime64[D]
 			- last_day:  datetime64[D]
-			- cluster:   int (optional: default 1)
+			- id_cluster:   int (optional: default 1)
 			- first_loc: int (optional: Default None)
 		frozen : bool, optional
-			If True, the Vehicle instance is immutable after creation. Default is False.
+			If True, the Vehiclesinstance is immutable after creation. Default is False.
 		"""
 		self._df = None
 		self._frozen = frozen
 		if input_df is not None:
 			self.df = input_df
+		self._event_on_logbooks = Event[int]()  # Event triggered on vehicle deletion
+		self._event_on_clusters = Event[self]()  # Event triggered on vehicle update
 	
 	@property
 	def df(self) -> pd.DataFrame:
@@ -542,9 +580,8 @@ class Vehicles:
 		# Validate combined DataFrame
 		self._df = VehiclesSchema.validate(new_df)
 
-		# set labels for clusters
-		self.set_label_clusters()
-	
+		# Triggger event to update cluster labels
+		self._event_on_add_update.trigger(new_vehicles_df)
 	
 	def update_vehicles(self, input_df: pd.DataFrame) -> None:
 		"""
@@ -558,7 +595,7 @@ class Vehicles:
 			- id_vehicle: int
 			- first_day: datetime64[D]
 			- last_day:  datetime64[D]
-			- cluster:   int
+			- id_cluster:   int
 			- first_loc: int (optional)
 		"""
 		# check if frozen
@@ -568,31 +605,25 @@ class Vehicles:
 		update_df = VehiclesSchema.validate(input_df)
 		
 		if self._df is None or self._df.empty:
-			message = "Vehicle DataFrame is empty. Cannot update vehicles."
+			message = "VehiclesDataFrame is empty. Cannot update vehicles."
 			logger.error(message)
 			raise ValueError(message)
 		
 		# Set index to id_vehicle for efficient lookup
-		self._df.set_index("id_vehicle", inplace=True)
+		existing_df = self._df.copy()
+		existing_df.set_index("id_vehicle", inplace=True)
 		update_df.set_index("id_vehicle", inplace=True)
 		
 		# Update all columns for vehicles that exist in update_df
-		self._df.update(update_df)
+		existing_df.update(update_df)
 		
-		self._df.reset_index(inplace=True)
+		existing_df.reset_index(inplace=True)
+		self._df = VehiclesSchema.validate(existing_df)
 
-		# set labels for clusters
-		self.set_label_clusters()
+		# Triggger event to update cluster labels
+		self._event_on_clusters.trigger(self)
 	
-	
-	def _check_frozen(self) -> bool:
-		"""Check if the Vehicle instance is frozen (immutable)."""
-		if self._frozen == True:
-			message = "This Vehicle instance is frozen and cannot be modified."
-			logger.error(message)
-			raise AttributeError(message)
-	
-	def _delete_vehicles(self, id_vehicle: list) -> None:
+	def delete_vehicles(self, id_vehicle: list) -> None:
 		"""Delete vehicles by vehicle ID.
 		
 		Parameters
@@ -610,31 +641,32 @@ class Vehicles:
 		mask = self._df["id_vehicle"].isin(id_vehicle)
 		self._df = self._df.loc[~mask].copy().reset_index(drop=True)
 
-		# set labels for clusters
-		self.set_label_clusters()
+		# Triggger event to update cluster labels and logbooks
+		self._event_on_logbooks.trigger(id_vehicle)
+		self._event_on_clusters.trigger(self)
 
-	def generate_vehicles_from_logbook(self, logbook: Logbooks) -> None:
+	def generate_vehicles_from_logbooks(self, logbooks: Logbooks) -> None:
 		"""
-		Generate vehicle DataFrame from a Logbook instance.
+		Generate vehicle DataFrame from a Logbooks instance.
 		
 		Parameters
 		----------
-		logbook : Logbook
-			Logbook instance with journey data to generate vehicles from.
+		logbooks : Logbooks
+			Logbooks instance with journey data to generate vehicles from.
 		"""
-		if isinstance(logbook, Logbooks) == False:
-			message = "logbook must be an instance of Logbook class."
+		if isinstance(logbooks, Logbooks) == False:
+			message = "logbooks must be an instance of Logbooks class."
 			logger.error(message)
 			raise TypeError(message)
 		
-		logbook_df = logbook.df
+		logbooks_df = logbooks.df
 		
-		if logbook_df is None or logbook_df.empty:
+		if logbooks_df is None or logbooks_df.empty:
 			self._df = VehiclesSchema.example(size=0)
 			return
 		
 		# Group by id_vehicle to get first_day, last_day and first_location
-		grouped = logbook_df.groupby("id_vehicle").agg(
+		grouped = logbooks_df.groupby("id_vehicle").agg(
 			first_day=pd.NamedAgg(column="dep_dt", aggfunc="min"),
 			last_day=pd.NamedAgg(column="arr_dt", aggfunc="max"),
 			first_loc=pd.NamedAgg(column="dep_loc", aggfunc="first")
@@ -649,30 +681,30 @@ class Vehicles:
 		
 		self._df = VehiclesSchema.validate(grouped)
 
-		# set labels for clusters
-		self.set_label_clusters()
+		# Triggger event to update cluster labels
+		self._event_on_clusters.trigger(self)
 	
-	def set_first_loc_from_logbook(self, logbook: Logbooks) -> None:
+	def set_first_loc_from_logbooks(self, logbooks: Logbooks) -> None:
 		"""
-		Set first_loc for each vehicle based on the first dep_loc in the logbook.
+		Set first_loc for each vehicle based on the first dep_loc in the logbooks.
         
 		Parameters
 		----------
-		logbook : Logbook
+		logbooks : Logbooks
 			Logbook instance with journey data to extract first locations from.
 		"""
-		if isinstance(logbook, Logbooks) == False:
-			message = "logbook must be an instance of Logbook class."
+		if isinstance(logbooks, Logbooks) == False:
+			message = "logbooks must be an instance of Logbook class."
 			logger.error(message)
 			raise TypeError(message)
 		
-		logbook_df = logbook.df
+		logbooks_df = logbooks.df
         
-		if logbook_df is None or logbook_df.empty:
+		if logbooks_df is None or logbooks_df.empty:
 			return
         
 		# Get first dep_loc per vehicle
-		first_loc = logbook_df.sort_values(by=['dep_dt']).groupby('id_vehicle').first().reset_index()
+		first_loc = logbooks_df.sort_values(by=['dep_dt']).groupby('id_vehicle').first().reset_index()
 		first_loc = first_loc[['id_vehicle', 'dep_loc']].rename(columns={'dep_loc': 'first_loc'})
         
 		# Remove existing first_loc column if present to avoid _x/_y suffix
@@ -685,50 +717,25 @@ class Vehicles:
 			on='id_vehicle',
 			how='left'
 		)
-
+		
 		# set first_loc of non driving vehicles to 1: nan --> 1
 		self._df.loc[self._df["first_loc"].isna(), "first_loc"] = 1
-
-	@validate_call
-	def set_label_clusters(self, labels: list[str] | None = None, clusters: list[int] | None = None) -> None:
-		"""Set labels for vehicle clusters.
-		Parameters
-		----------
-		labels : list of str
-			Label or list of labels to assign to clusters.
-		clusters : list of int
-			Cluster or list of clusters to assign labels to.
-		"""
-		# check if frozen
-		self._check_frozen()
-
-		# Get unique cluster values
-		cluster_values = self._df["cluster"].unique().tolist()
-		# Assign default clusters if none provided
-		if labels is None:
-			self.labels_clusters = [f"cluster={c}" for c in cluster_values]
-			return
-		
-		# Check dimensions of lists
-		if clusters is not None:
-			if len(clusters) != len(labels):
-				message = "Length of clusters and labels must match."
-				logger.error(message)
-				raise ValueError(message)
-		# Check number of clusters in vehicle dataframe
-		number_of_clusters = len(cluster_values)
-		if number_of_clusters != len(labels):
-			message = f"Number of unique clusters in vehicle DataFrame ({number_of_clusters}) does not match number of provided labels ({len(labels)})."
+		self._df["first_loc"] = self._df["first_loc"].astype("Int64")
+	
+	def _check_frozen(self) -> bool:
+		"""Check if the Vehiclesinstance is frozen (immutable)."""
+		if self._frozen == True:
+			message = "This Vehiclesinstance is frozen and cannot be modified."
 			logger.error(message)
-			raise ValueError(message)
-		
-		# Define labels for clusters
-		self.labels_clusters = labels
+			raise AttributeError(message)
+		return False
+
 
 class ClustersSchema(pa.DataFrameModel):
-	"""Pandera schema for Logbook Dataframe validation."""
+	"""Pandera schema for Logbooks Dataframe validation."""
 	id_cluster: int = pa.Field(ge=1, coerce=True)
-	label: int = pa.Field(ge=1, coerce=True)
+	label: str = pa.Field(coerce=True)
+	
 class Clusters:
 	"Class representing clusters of vehicles."
 	def __init__(self, vehicles: Vehicles | None = None):
@@ -737,17 +744,18 @@ class Clusters:
 
 		Parameters
 		----------
-		vehicles : Vehicle, optional
-			Vehicle instance with vehicle data including 'id_cluster' column.
+		vehicles : Vehicles, optional
+			Vehicles instance with vehicle data including 'id_cluster' column.
 		"""
 		if vehicles is None:
 			# Initialize empty clusters DataFrame
 			self._df =ClustersSchema.example(size=0)
 		elif isinstance(vehicles, Vehicles):
 			# Generate clusters from vehicles
-			self.update_cluster_from_vehicles(vehicles)
+			self._df = pd.DataFrame()
+			self.update_clusters_from_vehicles(vehicles)
 		else:
-			message = "vehicles must be an instance of Vehicle class."
+			message = "vehicles must be an instance of Vehicles class."
 			logger.error(message)
 			raise TypeError(message)
 
@@ -756,14 +764,14 @@ class Clusters:
 		"""Get the Dataframe of clusters."""
 		return self._df.copy()
 	
-	def update_cluster_from_vehicles(self, vehicles: Vehicles) -> None:
+	def update_clusters_from_vehicles(self, vehicles: Vehicles) -> None:
 		"""
 		Update clusters DataFrame based on current vehicle DataFrame.
 
 		Parameters
 		----------
-		vehicles : Vehicle
-			Vehicle instance with vehicle data including 'id_cluster' column.
+		vehicles : Vehicles
+			Vehicles instance with vehicle data including 'id_cluster' column.
 		"""
 		# Validate vehicle DataFrame
 		vehicles_df = vehicles.df
@@ -822,487 +830,37 @@ class Clusters:
 		existing_df.reset_index(inplace=True)
 
 		self._df = ClustersSchema.validate(existing_df)
-		
-class MobData:
-	"""
-	Base class for mobility data in the champpy framework.
-	"""
-	def __init__(
-		self,
-		input_logbook_df: pd.DataFrame,
-		input_vehicle_df: pd.DataFrame | None = None,
-		frozen: bool = False
-		):
+
+class LocationsSchema(pa.DataFrameModel):
+	"""Pandera schema for Logbooks Dataframe validation."""
+	location: int = pa.Field(ge=0, coerce=True)
+	label: str = pa.Field(coerce=True)
+
+class Locations:
+	"Class representing locations used in journeys."
+	def __init__(self, input_df: pd.DataFrame = None):
 		"""
-		Initialize a MobData object.
+		Initialize Locations instance.
 
 		Parameters
 		----------
-		input_logbook_df : pd.DataFrame
-			Input DataFrame for the logbook.
+		input_df : pd.DataFrame, optional
+			Initial DataFrame with location data.
 			Expected columns and dtypes:
-			- id_vehicle: int
-			- dep_dt: datetime64[ns]
-			- arr_dt: datetime64[ns]
-			- dep_loc: str
-			- arr_loc: str
-			- distance: float
-		input_vehicle_df : pd.DataFrame, optional
-			Input DataFrame for the vehicles.
-			Expected columns and dtypes:
-			- id_vehicle: int
-			- first_day: datetime64[D]
-			- last_day:  datetime64[D]
-			- cluster:   int
-			- first_loc: int (optional)
-		frozen : bool, optional
-			If True, the MobData instance is immutable after creation. Default is False.
+			- location: int
+			- label: str
 		"""
-		self.logbook = Logbooks(input_df=input_logbook_df, frozen=frozen)
-		if input_vehicle_df is not None:
-			self.vehicles = Vehicles(input_df=input_vehicle_df)
-			if self.vehicles.df["first_loc"].isnull().all():
-				self.vehicles.set_first_loc_from_logbook(self.logbook)
+		if input_df is None:
+			self._df = LocationsSchema.example(size=0)
 		else:
-			self.vehicles = Vehicles(frozen=False)
-			self.vehicles.generate_vehicles_from_logbook(self.logbook)
-
-		# set frozen after initialization
-		self.vehicles._frozen = frozen  
-		self._cleaned = False
-	
-	def __copy__(self):
-		return MobData(self.logbook.df, self.vehicles.df)
-	
-	def add_mob_data(self, input_mob_data: "MobData") -> None:
-		"""
-		Add mobility data from another MobData instance.
-
-		Parameters
-		----------
-		other : MobData
-			Another MobData instance to add data from.
-		"""
-		if not isinstance(input_mob_data, MobData):
-			message = "other must be an instance of MobData."
-			logger.error(message)
-			raise TypeError(message)
-		
-		# extract dataframes
-		logbook_df = input_mob_data.logbook.df
-		vehicles_df = input_mob_data.vehicles.df
-
-		# Make sure vehicle IDs and clusters are unique across both datasets
-		max_id_vehicle = self.vehicles.df["id_vehicle"].max() if not self.vehicles.df.empty else 0
-		max_cluster = self.vehicles.df["cluster"].max() if not self.vehicles.df.empty else 0
-		vehicles_df["id_vehicle"] += max_id_vehicle + 1 
-		logbook_df["id_vehicle"] += max_id_vehicle + 1
-		vehicles_df["cluster"] += max_cluster + 1 
-		
-		# Add to logbook and vehicles
-		self.vehicles.add_vehicles(vehicles_df)
-		self.logbook.add_journeys(logbook_df)
-
-		# Reindex IDs id_vehicles and id_journey after addition
-		self.reindexing()
-
-	def reindexing(self) -> None:
-		"""
-		Reindex vehicle and journey IDs in the MobData instance.
-		- id_vehicle: Renumbered from 1 to number_vehicles
-		- id_journey: Renumbered from 1 to number_journeys
-		"""
-		# Reindex vehicles based on logbook starting from 1
-		unique_vehicles = self.logbook.df["id_vehicle"].unique()
-		reindex_map = {old_id: new_id for new_id, old_id in enumerate(sorted(unique_vehicles), start=1)}
-		self.logbook._df["id_vehicle"] = self.logbook._df["id_vehicle"].map(reindex_map)
-		self.vehicles._df["id_vehicle"] = self.vehicles._df["id_vehicle"].map(reindex_map)
-
-		# Reindex cluster starting from 0
-		unique_clusters = self.vehicles.df["cluster"].unique()
-		cluster_map = {old_cluster: new_cluster for new_cluster, old_cluster in enumerate(sorted(unique_clusters))}
-		self.vehicles._df["cluster"] = self.vehicles._df["cluster"].map(cluster_map)
-
-		# Reindex id_journey
-		self.logbook.reindexing(type="id_journey")
-
-	@validate_call
-	def delete_vehicles(self, id_vehicle: list, reindex: bool = True) -> None:
-		"""Delete vehicles from logbook and vehicle tables.
-
-		Parameters
-		----------
-		id_vehicle : list[int]
-			List of vehicle IDs to delete.
-		reindex : bool, optional
-			If True, reindex IDs in the logbook after deletion. Default True.
-		"""
-		# Remove journeys for these vehicles
-		self.logbook._delete_vehicles(id_vehicle=id_vehicle, reindex=reindex)
-		# Remove corresponding vehicle rows
-		self.vehicles._delete_vehicles(id_vehicle=id_vehicle)
-
-	@validate_call
-	def get_annual_km(self, aggregate: bool = True, agg_method: Literal["mean", "sum"] = "mean") -> pd.DataFrame:
-		"""
-		Calculate annual kilometrage per vehicle.
-
-		Params
-		------
-		aggregate : bool, optional
-			If True, return aggregated annual kilometers. Default is True.
-		agg_method : str, optional
-			Method to aggregate annual kilometers. Options are "mean" or "sum". Default is "mean".
-
-		Returns
-		-------
-		pd.DataFrame
-			DataFrame with columns 'id_vehicle' and 'annual_km'.
-		"""
-		if agg_method not in ["mean", "sum"]:
-			message = "agg_method must be either 'mean' or 'sum'."
-			logger.error(message)
-			raise ValueError(message)
-		
-		# Empty guard
-		if self.logbook.df is None or self.logbook.df.empty:
-			return pd.DataFrame(columns=["id_vehicle", "annual_km"])
-
-		# Calculate total distance per vehicle
-		distance_per_vehicle = self.logbook.df.groupby("id_vehicle")["distance"].sum().reset_index()
-
-		# Calculate number of active days per vehicle
-		number_days = (self.vehicles.df["last_day"] - self.vehicles.df["first_day"] + pd.Timedelta(days=1)).dt.days
-
-		# Merge to ensure all vehicles are included
-		df = self.vehicles.df[["id_vehicle"]].copy()
-		df = df.merge(distance_per_vehicle, on="id_vehicle", how="left")
-		df["distance"] = df["distance"].fillna(0)
-		df["number_days"] = number_days.values
-		df["annual_km"] = df["distance"] / df["number_days"] * 365
-		df["annual_km"] = df["annual_km"].fillna(0)
-		
-		if aggregate:
-			if agg_method == "mean":
-				annual_km = df["annual_km"].mean()
-			else:  # agg_method == "sum"
-				annual_km = df["annual_km"].sum()
-			output_df = pd.DataFrame({"annual_km": [annual_km]})
-		else:
-			output_df = df[["id_vehicle", "annual_km"]]
-		return output_df
-	
-	@validate_call
-	def get_share_of_time_at_locations(self, aggregate: bool = True) -> pd.DataFrame:
-		"""
-		Calculate the share of time the vehicles spend at each location.
-		Params
-		------
-		aggregate : bool, optional
-			If True, return aggregated share per location across all vehicles.
-			If False, return share per vehicle and location. Default is True.
-
-		Returns
-		-------
-		pd.DataFrame
-			DataFrame with columns 'id_vehicle', 'location', and 'share'.
-		"""
-		# Get total hours per vehicle
-		total_day_per_vehicle = self.vehicles.df["last_day"] - self.vehicles.df["first_day"] + pd.Timedelta(days=1)
-		total_hours_per_vehicle = total_day_per_vehicle.dt.total_seconds() / 3600
-
-		# Get extended mobility data and group by location and id_vehicle and sum duration
-		extended_mob_data = MobDataExtended(self, splitdays=False).df
-
-		# Aggregate
-		if aggregate:
-			# group by location and sum duration
-			location_duration_df = (
-				extended_mob_data
-				.groupby(["location"])["duration"]
-				.sum()
-				.reset_index()
-			)
-
-			# add new column total_hours with total hours of all vehicles
-			location_duration_df["total_hours"] = total_hours_per_vehicle.sum()
-
-		else:
-			# group by location and id_vehicle and sum duration
-			location_duration_df = (
-				extended_mob_data
-				.groupby(["location", "id_vehicle"])["duration"]
-				.sum()
-				.reset_index()
-			)
-
-			# merge total hours per vehicle
-			location_duration_df = location_duration_df.merge(
-				total_hours_per_vehicle.rename("total_hours"),
-				left_on="id_vehicle",
-				right_index=True,
-				how="left"
-			)
-
-		# calculate share per vehicle at each location
-		location_duration_df["share"] = location_duration_df["duration"] / location_duration_df["total_hours"]
-		# replace nan with 0
-		location_duration_df["total_hours"] = location_duration_df["total_hours"].fillna(0)
-		location_duration_df["share"] = location_duration_df["share"].fillna(0)
-		# rename duration to hours_at_location
-		location_duration_df = location_duration_df.rename(columns={"duration": "hours_at_location"})
-
-		return location_duration_df
-
-class MobProfiles(MobData):
-	""" 
-	Class for modeled mobility profiles. Child of MobData but first_day and last_day of all vehicles are equal. 
-	MobProfiles are immutable after creation. 
-
-	Parameters
-	----------
-	first_day : pd.Timestamp
-		First day of all vehicles in the profile.
-	last_day : pd.Timestamp
-		Last day of all vehicles in the profile.
-	number_vehicles : int
-		Number of vehicles in the profile.
-	input_logbook_df : pd.DataFrame
-		Input DataFrame for the logbook.
-	"""
-	def __init__(
-		self,
-		first_day: pd.Timestamp,
-		last_day:  pd.Timestamp,
-		number_vehicles: int,
-		input_logbook_df: pd.DataFrame,
-	):	
-		# Create vehicle dataframe with same first_day and last_day for all vehicles
-		vehicle_df = pd.DataFrame({
-			"id_vehicle": range(1, number_vehicles + 1),
-			"first_day": [first_day.floor('D')] * number_vehicles,
-			"last_day":  [last_day.floor('D')] * number_vehicles,
-			"cluster":   [1] * number_vehicles
-		})
-		super().__init__(input_logbook_df=input_logbook_df, input_vehicle_df=vehicle_df)
-		self.frozen = True  # make MobProfiles immutable after creation
-
-class MobDataExtended:
-	"""
-	Extended MobData with additional attributes for modeling.
-
-	Parameters
-	----------
-	mob_data : MobData
-		Base MobData instance.
-	"""
-	def __init__(self, mob_data: MobData, splitdays: bool = True):
-		
-		if not isinstance(mob_data, MobData):
-			message = "mob_data must be an instance of MobData class."
-			logger.error(message)
-			raise TypeError(message)
-		
-		# Predefine empty DataFrame with required columns
-		self._df = pd.DataFrame({
-			'id_vehicle': pd.Series(dtype='int64'),
-			'start_dt': pd.Series(dtype='datetime64[ns]'),
-			'end_dt': pd.Series(dtype='datetime64[ns]'),
-			'location': pd.Series(dtype='int64'),
-			'speed': pd.Series(dtype='float64')
-		})
-
-		# Extend mob_data to include standing and non-driving vehicles
-		self._extended_mob_data(mob_data)
-		
-		# Split multi-day rows if required
-		self._split_multi_day_rows(splitdays=splitdays)
-
-		# Join the 'cluster' column from t_vehicle into t_location
-		self._df = self._df.merge(mob_data.vehicles._df[['id_vehicle', 'cluster']], on='id_vehicle', how='left')
-		self._df['cluster'] = self._df['cluster'].astype('int64')
-
-		self.labels_clusters = mob_data.vehicles.labels_clusters
+			self.df = input_df
 
 	@property
 	def df(self) -> pd.DataFrame:
-		"""Get a copy of the extended MobData DataFrame."""			
-		# Calculate distance and duration
-		duration = (self._df["end_dt"] - self._df["start_dt"]).dt.total_seconds() / 3600  # in hours
-		distance = self._df["speed"] * duration  # in km/h
-		return self._df.copy().assign(duration=duration, distance=distance)
-
-	def _extended_mob_data(self, mob_data: MobData):
-		"""
-		Create extended DataFrame with additional attributes.
-
-		Returns
-		-------
-		pd.DataFrame
-			Extended DataFrame.
-		"""
-		# convert automatically to uniform temporal resolution
-		if mob_data.logbook.temp_res is None:
-			# find the minimum temporal resolution in hours
-			min_res = mob_data.logbook.df.apply(
-				lambda row: (row['arr_dt'] - row['dep_dt']).total_seconds() / 3600, axis=1
-			).min()
-			mob_data.logbook.temp_res = min_res
-
-		lb_df = mob_data.logbook._df
-		vehicles_df = mob_data.vehicles._df
-
-		# determine first_loc for vehicles if nan
-		if any(vehicles_df["first_loc"].isna()):
-			vehicles_df.set_first_loc_from_logbook(mob_data.logbook)
-
-		# Identify non-drivers
-		mask_nondriver_vehicle = ~vehicles_df['id_vehicle'].isin(lb_df['id_vehicle'])
-		n_nondriver_vehicle = mask_nondriver_vehicle.sum()
-		
-		# Create t_nondriver only if there are non-driver vehicles
-		if n_nondriver_vehicle > 0:
-			# Use first_loc if available, otherwise use default location 1
-			nondriver_locations = vehicles_df.loc[mask_nondriver_vehicle, 'first_loc'].astype('int64')
-			
-			nondriver_df = pd.DataFrame({
-				'id_vehicle': vehicles_df.loc[mask_nondriver_vehicle, 'id_vehicle'],
-				'start_dt': vehicles_df.loc[mask_nondriver_vehicle, 'first_day'],
-				'end_dt': vehicles_df.loc[mask_nondriver_vehicle, 'last_day'],
-				'location': nondriver_locations,
-				'speed': 0
-			})
-		else:
-			nondriver_df = pd.DataFrame()
-		
-		# return if all vehicles are non-drivers
-		if n_nondriver_vehicle == len(vehicles_df):
-			self._df = nondriver_df.sort_values(by=['id_vehicle', 'start_dt']).reset_index(drop=True)
-			return
-		
-		# Filter vehicles with journeys
-		vehicle_df_drivers = vehicles_df.loc[~mask_nondriver_vehicle]
-
-		# Find first and last track of each vehicle
-		group = lb_df.groupby('id_vehicle')
-		first_id_track = group['id_journey'].min()
-		last_id_track = group['id_journey'].max()
-
-		# Define rows for locations before the first trip
-		start_df = pd.DataFrame({
-			'id_vehicle': vehicle_df_drivers['id_vehicle'],
-			'start_dt': vehicle_df_drivers['first_day'],
-			'end_dt': lb_df.dep_dt[lb_df['id_journey'].isin(first_id_track)].values,
-			'location': lb_df.dep_loc[lb_df['id_journey'].isin(first_id_track)].values,
-			'speed': 0
-		})
-
-		# Define rows for locations after the last trip
-		end_df = pd.DataFrame({
-			'id_vehicle': vehicle_df_drivers['id_vehicle'],
-			'start_dt': lb_df.arr_dt[lb_df['id_journey'].isin(last_id_track)].values,
-			'end_dt': vehicle_df_drivers['last_day'] + pd.Timedelta(days=1),
-			'location': lb_df.arr_loc[lb_df['id_journey'].isin(last_id_track)].values,
-			'speed': 0
-		})
-
-		# Define rows for locations between trips
-		standing_df = pd.DataFrame({
-			'id_vehicle': lb_df.id_vehicle[~lb_df['id_journey'].isin(last_id_track)].values,
-			'start_dt': lb_df.arr_dt[~lb_df['id_journey'].isin(last_id_track)].values,
-			'end_dt': lb_df.dep_dt[~lb_df['id_journey'].isin(first_id_track)].values,
-			'location': lb_df.arr_loc[~lb_df['id_journey'].isin(last_id_track)].values,
-			'speed': 0
-		})
-
-		# Define rows for location driving
-		driving_df = pd.DataFrame({
-			'id_vehicle': lb_df['id_vehicle'],
-			'start_dt': lb_df['dep_dt'],
-			'end_dt': lb_df['arr_dt'],
-			'location': 0,
-			'speed': lb_df['distance'] / ((lb_df['arr_dt'] - lb_df['dep_dt']).dt.total_seconds() / 3600)
-		})
-
-		# Merge dataframes
-		self._df = pd.concat([nondriver_df, start_df, standing_df, driving_df, end_df]).sort_values(by=['id_vehicle', 'start_dt'])
-		self._df.reset_index(drop=True, inplace=True)
-
-	def _split_multi_day_rows(self, splitdays: bool) -> pd.DataFrame:
-		"""
-		Split multi-day rows in t_location into single-day rows.
-		"""
-		if not splitdays:
-			return
-
-		# Split multi-day rows: vehicle is at one location over several days
-		day_start = self._df['start_dt'].dt.floor('D')
-		day_end = self._df['end_dt'].dt.floor('D')
-		n_days = (day_end - day_start).dt.days + 1
-		row_end_at_midnight = (self._df['end_dt'].dt.time == pd.Timestamp('00:00:00').time()) & (n_days > 1)
-
-		# determine days per vehicle
-		group = self._df.groupby('id_vehicle')
-		first_day = group['start_dt'].min()
-		last_day = group['end_dt'].max()
-		days_per_vehicle = (last_day - first_day).dt.days
-		
-		# Abort if no multi-day rows exist
-		if all(n_days == 1) or all(days_per_vehicle == 1):
-			return self._df
-		
-		# New row for the last day of a multi-day row
-		log_add_row_end = ~row_end_at_midnight & (n_days > 1)
-		split_end_df = pd.DataFrame({
-			'id_vehicle': self._df.loc[log_add_row_end, 'id_vehicle'],
-			'start_dt': self._df.loc[log_add_row_end, 'end_dt'].dt.floor('D'),
-			'end_dt': self._df.loc[log_add_row_end, 'end_dt'],
-			'location': self._df.loc[log_add_row_end, 'location'],
-			'speed': self._df.loc[log_add_row_end, 'speed']
-		})
-
-		# New rows for constant days in the middle: vehicle is at the same location over the whole day
-		n_parking_days = n_days - 2
-		n_parking_days[n_parking_days < 0] = 0
-		parking_start_day = day_end[n_parking_days > 0] - pd.to_timedelta(n_parking_days[n_parking_days > 0], unit='D')
-		parking_end_day = day_end[n_parking_days > 0]
-		parking_days = [pd.date_range(start, end, inclusive='left') 
-							for start, end in zip(parking_start_day, parking_end_day)]
-		split_mid_df = pd.DataFrame({
-			'id_vehicle': np.repeat(self._df.loc[n_parking_days > 0, 'id_vehicle'].values, n_parking_days[n_parking_days > 0]),
-			'start_dt': np.concatenate(parking_days),
-			'end_dt': np.concatenate(parking_days) + pd.Timedelta(days=1),
-			'location': np.repeat(self._df.loc[n_parking_days > 0, 'location'].values, n_parking_days[n_parking_days > 0]),
-			'speed': 0
-		})
-
-		# Modify t_location for the first day of multi-day row
-		self._df.loc[n_days > 1, 'end_dt'] = day_start[n_days > 1] + pd.Timedelta(days=1)
-
-		# Merge
-		self._df = pd.concat([self._df, split_mid_df, split_end_df]).sort_values(by=['id_vehicle', 'start_dt'])
-
-		# reset index
-		self._df.reset_index(drop=True, inplace=True)
+		"""Get the Dataframe of locations."""
+		return self._df.copy()
 	
-	def extract_cluster(self, cluster_id: int, copy: bool = True) -> "MobDataExtended":
-		"""
-		Extract a specific cluster from the extended mobility data.
-
-		Parameters
-		----------
-		cluster_id : int
-			Cluster ID to extract.
-
-		Returns
-		-------
-		MobDataExtended
-			New MobDataExtended instance with data for the specified cluster.
-		"""
-		if copy:
-			cluster_df = self._df[self._df['cluster'] == cluster_id].copy().reset_index(drop=True)
-		else:
-			cluster_df = self._df[self._df['cluster'] == cluster_id].reset_index(drop=True)
-		new_instance = MobDataExtended.__new__(MobDataExtended)
-		new_instance._df = cluster_df
-		return new_instance
+	@df.setter
+	def df(self, value: pd.DataFrame):
+		"""Set locations DataFrame with validation."""
+		self._df = LocationsSchema.validate(value)
