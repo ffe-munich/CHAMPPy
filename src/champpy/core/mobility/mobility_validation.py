@@ -10,7 +10,7 @@ from pydantic import ConfigDict, validate_call
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 from rich.progress import Progress
 from dataclasses import field
-from champpy.core.mobility_data import MobData, MobDataExtended
+from champpy.core.mobility.mobility_data import MobData, MobDataExtended
 from champpy.utils.time_utils import TypeDays, get_week_index
 
 logger = logging.getLogger(__name__)
@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 class UserParamsMobPlotter:
     filename: str = "mob_plots.html"
     font_family: str = "Segoe UI"
+    save_plot: bool = True  # Option to control whether plots are saved to file
     show: bool = True
     font_size: int = 18
     rgb_color: Optional[list] = field(default_factory=lambda:[ # RGB color matrix for plotting clusters
@@ -31,12 +32,11 @@ class UserParamsMobPlotter:
             [0.4784, 0.1098, 0.1098]
         ])
     location_temp_res: Optional[int] = 1 # Temporal resolution in hours, only relevant for location profile plots
-    location_order: Optional[list] = None # Order of locations for plotting location profiles
-    location_labels: Optional[list[str]] = None # Labels for locations for plotting location profiles
+    location_order: Optional[list] = field(default_factory=lambda:[])
 
 class MobPlotter:
     """ Class for plotting mobility characteristics. """
-    def __init__(self, user_params: UserParamsMobPlotter):
+    def __init__(self, user_params: Optional[UserParamsMobPlotter] = UserParamsMobPlotter()):
         # Define a global RGB color matrix
         self._filename = user_params.filename
         self._rgb_color = user_params.rgb_color
@@ -45,15 +45,16 @@ class MobPlotter:
         self._font_size = user_params.font_size
         self._temp_res = user_params.location_temp_res
         self._location_order = user_params.location_order
-        self._location_labels = user_params.location_labels
+        self._save_plot = user_params.save_plot
 
         # Placeholder for temporary variables
-        self._clusters = []
-        self._legend_clusters = []
         self._location_order = []
         self._location_labels = []
+        self._clusters = []
+        self._legend_clusters = []
+        self._label_positions = []
 
-    def plot_mob_data(self, mob_data):
+    def plot_mob_data(self, mob_data: MobData | MobDataExtended):
         """
         Generate a combined HTML file with plots from plot_mob_char, plot_hist, and plot_location_profile_week.
 
@@ -64,7 +65,7 @@ class MobPlotter:
         """
 
         # Parse mob_data to ensure it is MobDataExtended
-        mob_data_ext = self._parse_mob_data(mob_data)
+        mob_data_ext = parse_mob_data(mob_data, splitdays=True)
 
         # Disable individual plot showing
         cache_show = self._show
@@ -81,19 +82,26 @@ class MobPlotter:
             progress.update(task, advance=1)
 
         # Ensure the output_file path is absolute and properly formatted
-        output_file = os.path.abspath(self._filename)
+        # Ensure the output_file has .html extension, replacing any existing extension
+        base, ext = os.path.splitext(self._filename)
+        if ext != "html" and self._save_plot:
+            logger.warning(f"Can only export as html. Fileformat of output file '{self._filename}'is changed to .html extension.")
+        output_file = base + '.html'
+        output_file = os.path.abspath(output_file)
 
-        # Combine all figures into a single HTML file
-        with open(output_file, "w", encoding="utf-8") as f:
-            f.write(f"<html><head><title>Combined Plots</title><style>body {{ font-family: {self._font_family}; }}</style></head><body>\n")
-            f.write("<h1>Combined Plots</h1>\n")
-            f.write("<h2>📊 Mobility Characteristics</h2>")
-            f.write(fig_mob_char.to_html(full_html=False, include_plotlyjs='cdn'))
-            f.write("<h2>📈 Histogram of Mobility Characteristics</h2>\n")
-            f.write(fig_hist.to_html(full_html=False, include_plotlyjs=False))
-            f.write("<h2>📍 Location Profile Over the Week</h2>\n")
-            f.write(fig_location_profile.to_html(full_html=False, include_plotlyjs=False))
-            f.write("</body></html>")
+
+        # Combine all figures into a single HTML file if save_plot is True
+        if self._save_plot:
+            with open(output_file, "w", encoding="utf-8") as f:
+                f.write(f"<html><head><title>Combined Plots</title><style>body {{ font-family: {self._font_family}; }}</style></head><body>\n")
+                f.write("<h1>Combined Plots</h1>\n")
+                f.write("<h2>📊 Mobility Characteristics</h2>")
+                f.write(fig_mob_char.to_html(full_html=False, include_plotlyjs='cdn'))
+                f.write("<h2>📈 Histogram of Mobility Characteristics</h2>\n")
+                f.write(fig_hist.to_html(full_html=False, include_plotlyjs=False))
+                f.write("<h2>📍 Location Profile Over the Week</h2>\n")
+                f.write(fig_location_profile.to_html(full_html=False, include_plotlyjs=False))
+                f.write("</body></html>")
 
         # Restore the original show setting
         self._show = cache_show
@@ -101,151 +109,6 @@ class MobPlotter:
         # Open the HTML file in the default web browser
         if self._show:
             webbrowser.open(f"file://{output_file}")
-
-    def _parse_mob_data(self, mob_data: MobData | MobDataExtended) -> MobDataExtended:
-        """
-        Ensure the input mobility data is of type MobDataExtended.
-
-        Parameters:
-        mob_data (MobData | MobDataExtended): Input mobility data.
-
-        Returns:
-        MobDataExtended: Parsed mobility data.
-        """
-        if isinstance(mob_data, MobDataExtended):
-            return mob_data
-        elif isinstance(mob_data, MobData):
-            return MobDataExtended(mob_data)
-        else:
-            raise TypeError("mob_data must be an instance of MobData or MobDataExtended.")
-    
-    @staticmethod
-    def calc_share_of_time_at_locations(location: np.ndarray | pd.Series) -> tuple[np.ndarray, np.ndarray]:
-        """
-        Calculate the share of time spent at each location.
-
-        Parameters:
-        location (np.ndarray | pd.Series): Array of location indices.
-
-        Returns:
-        tuple: share percentages and corresponding unique locations.
-        """
-        # Check location array
-        if not isinstance(location, np.ndarray) and not isinstance(location, pd.Series):
-            raise TypeError("location must be a numpy ndarray or pandas Series.")
-        if location.ndim != 1:
-            raise ValueError("location array must be one-dimensional.")
-        if location.size == 0:
-            raise ValueError("location array must not be empty.")
-
-        unique_locations, indices_locations = np.unique(location, return_inverse=True)
-        counts = np.bincount(indices_locations)
-        total_elements = location.size
-        share_at_locations = counts / total_elements * 100
-        return share_at_locations, unique_locations
-    
-    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
-    def calc_mob_char(self, 
-                mob_data: MobData | MobDataExtended,
-                typedays: TypeDays = TypeDays(groups=[[0,1,2,3,4],[5],[6]]),
-                grouping: Literal['none', 'vehicle', 'day'] = 'none',
-                method: Literal['mean', 'max', 'min'] = 'mean',
-                calc_share_at_locations: bool = True) -> pd.DataFrame:
-        """
-        Calculate mobility characteristics and save the values in an overview dataframe.
-        
-        Parameters:
-        ----------
-        mob_data (MobData | MobDataExtended): Mobility data instance.
-        typedays (TypeDays): Define type of days. Default is weekdays and weekend.
-        grouping (str): The output table can be grouped by 'none', 'vehicle', or 'day'. Default is 'none'.
-        method (str): Method to determine the characteristics: 'mean', 'max', 'min'. Default is 'mean'.
-        calc_share_at_locations (bool): Whether to calculate the variable share_at_locations. Default is True.
-        
-        Returns:
-        pd.DataFrame: Overview table with mobility characteristics for the defined type of days.
-        """
-
-        # Parse mob_data to ensure it is MobDataExtended
-        mob_data_ext = self._parse_mob_data(mob_data).df
-
-        if calc_share_at_locations and method != 'mean':
-            logger.warning('The variable <share_at_locations> can only be calculated for method = "mean".')
-            calc_share_at_locations = False
-
-        # Prepare extended mob data dataframe
-        mob_data_ext["weekday"] = mob_data_ext["start_dt"].dt.dayofweek # Monday=0, Sunday=6
-        mob_data_ext["index_typeday"] = mob_data_ext["weekday"].apply(typedays.weekday2typeday)
-        mob_data_ext['date'] = mob_data_ext['start_dt'].dt.normalize()
-        # Add a new column 'duration_driving' where 'duration' is retained if 'location' is 0, otherwise 0
-        mob_data_ext["duration_driving"] = np.where(mob_data_ext['location'] == 0, mob_data_ext['duration'], 0)
-        unique_id_vehicle = mob_data_ext['id_vehicle'].unique()
-
-        if method == 'mean':
-            pd_method = pd.Series.mean
-        elif method == 'min':
-            pd_method = pd.Series.min
-        elif method == 'max':
-            pd_method = pd.Series.max
-        else:
-            raise ValueError("Method must be one of ['mean', 'min', 'max']")
-
-        mob_char = []
-
-        for index_typeday in typedays.index:
-            typeday_label = typedays.names[index_typeday]
-
-            # Filter rows for current type of days
-            mask_days = mob_data_ext['index_typeday'] == index_typeday
-            mob_data_filtered = mob_data_ext[mask_days]
-
-            # Group by vehicle and day
-            group = mob_data_filtered.groupby(['id_vehicle', 'date'])
-            group_vehicles = mob_data_filtered.groupby(['id_vehicle'])
-
-            # Vektorisierte Berechnungen
-            daily_mileage = group['distance'].sum()
-            daily_triptime = group['duration_driving'].sum() 
-            daily_n_trips = group['location'].apply(lambda x: (x == 0).sum())
-            daily_log_trips = group['location'].apply(lambda x: (x == 0).any())
-
-            # grouping
-            if grouping == 'none':
-                if calc_share_at_locations:
-                    share_at_locations, locations = self.calc_share_of_time_at_locations(mob_data_filtered["location"].to_numpy())
-                stat_daily_mileage = pd_method(daily_mileage)
-                stat_daily_triptime = pd_method(daily_triptime)
-                stat_n_trips = pd_method(daily_n_trips)
-                share_days_with_trips = pd_method(daily_log_trips)
-
-            elif grouping == 'day':
-                if calc_share_at_locations:
-                    share_at_locations, locations = zip(*group["location"].apply(lambda x: self.calc_share_of_time_at_locations(x)))
-                stat_daily_mileage = daily_mileage
-                stat_daily_triptime = daily_triptime
-                stat_n_trips = daily_n_trips
-                share_days_with_trips = daily_log_trips
-
-            elif grouping == 'vehicle':
-                if calc_share_at_locations:
-                    share_at_locations, locations = zip(*group_vehicles["location"].apply(lambda x: self.calc_share_of_time_at_locations(x)))
-                stat_daily_mileage = daily_mileage.groupby(level='id_vehicle').agg(pd_method)
-                stat_daily_triptime = daily_triptime.groupby(level='id_vehicle').agg(pd_method)
-                stat_n_trips = daily_n_trips.groupby(level='id_vehicle').agg(pd_method)
-                share_days_with_trips = daily_log_trips.groupby(level='id_vehicle').agg(pd_method)
-
-            # save results
-            mob_char.append({
-                'typeday': typeday_label,
-                'daily_kilometrage': stat_daily_mileage.tolist(),
-                'daily_journey_time': stat_daily_triptime.tolist(),
-                'number_journeys_per_day': stat_n_trips.tolist(),
-                'share_days_with_journeys': share_days_with_trips.tolist(),
-                'locations': locations if calc_share_at_locations else None,
-                'share_of_time_at_locations': share_at_locations if calc_share_at_locations else None
-            })
-
-        return pd.DataFrame(mob_char)
 
     def plot_mob_char(self, mob_data: MobData | MobDataExtended):
         """
@@ -258,108 +121,65 @@ class MobPlotter:
         fig: Plotly figure object.
         """
         # Parse mob_data to ensure it is MobDataExtended
-        mob_data_ext = self._parse_mob_data(mob_data)
-        self._get_legend_clusters(mob_data_ext)
-        
-        # Split t_lb into clusters and apply mob_char for each cluster
-        mob_char_df_clusters = []
-        number_of_clusters = mob_data_ext.df['cluster'].nunique()
-        for cluster in range(1, number_of_clusters+1):
-            mob_data_cluster = mob_data_ext.extract_cluster(cluster_id=cluster, copy=False)
-            # Call calc_mob_char for the current cluster
-            mob_char_df_week_weekdend = self.calc_mob_char(
-                            mob_data_cluster,
-                            method='mean',
-                            typedays=TypeDays(groups=[[0,1,2,3,4],[5,6]]),
-                            calc_share_at_locations=False
-                            )
-            mob_char_df_week = self.calc_mob_char(
-                            mob_data_cluster,
-                            method='mean',
-                            typedays=TypeDays(groups=[[0, 1, 2, 3, 4, 5, 6]]),
-                            calc_share_at_locations=False
-                            )
-        
-            # Add a column to identify the cluster in the result
-            mob_char_df_week_weekdend['cluster'] = cluster
-            mob_char_df_week['cluster'] = cluster
-            # Append the result to the list
-            mob_char_df_clusters.append(mob_char_df_week_weekdend)
-            mob_char_df_clusters.append(mob_char_df_week)
+        mob_data_ext = parse_mob_data(mob_data, splitdays=True)
+        self._store_locations_clusters(mob_data_ext)
 
-        # Combine all results into a single DataFrame
-        mob_char_df = pd.concat(mob_char_df_clusters, ignore_index=True)
+        # Calculate mobility characteristics for the current cluster
+        mob_char_df_week_weekdend = MobilityCharacteristics(
+                        mob_data_ext,
+                        method='mean',
+                        typedays=TypeDays(groups=[[0,1,2,3,4],[5,6]]),
+                        clustering=True,
+                        calc_share_at_locations=False
+                        ).df
+        mob_char_df_week = MobilityCharacteristics(
+                        mob_data_ext,
+                        method='mean',
+                        typedays=TypeDays(groups=[[0, 1, 2, 3, 4, 5, 6]]),
+                        clustering=True,
+                        calc_share_at_locations=False
+                        ).df
+        
+        # Append mobility characteristics of week and weekend to one dataframe
+        mob_char_df = pd.concat([mob_char_df_week_weekdend, mob_char_df_week], ignore_index=True)
 
-        # Extract data for plotting
-        typedays = ["Weekend", "Weekdays", "Total"]
+        # Define typedays and metrics for plotting
+        typedays = ["Weekdays", "Weekend", "Total"]
+        metrics = ['daily_kilometrage', 'daily_journey_time', 'number_journeys_per_day']
+
+        # Create subplot
         fig = subplots.make_subplots(rows=1, cols=3, horizontal_spacing=0.15)
 
         # Plot for each cluster
-        for cluster in self._clusters:
-            cluster_data = mob_char_df[mob_char_df['cluster'] == cluster] if cluster is not None else mob_char_df
-            daily_mileage = cluster_data['daily_kilometrage'].tolist()
-            daily_triptime = cluster_data['daily_journey_time'].tolist()
-            n_trips_per_day = cluster_data['number_journeys_per_day'].tolist()
-
+        for idx_cluster, cluster in enumerate(mob_data_ext.clusters):
+            # Filter data for the current cluster and type of days
+            cluster_data = mob_char_df[mob_char_df['id_cluster'] == cluster] if cluster is not None else mob_char_df
             # select color for the cluster
             cluster_color = f"rgb({self._rgb_color[cluster][0] * 255},{self._rgb_color[cluster][1] * 255},{self._rgb_color[cluster][2] * 255})"
 
-            # Add traces for each metric
-            fig.add_trace(
+            for idx_metrix, metric in enumerate(metrics):
+                values = cluster_data[metric].tolist()
+                show_legend = True if idx_metrix == 0 else False  # Show legend only for the first metric
+                fig.add_trace(
                 go.Bar(
                     y=typedays,
-                    x=daily_mileage,
+                    x=values,
                     marker_color=cluster_color,
                     orientation='h',
-                    name=self._legend_clusters[cluster-1],
-                    legendgroup=self._legend_clusters[cluster-1],
-                    showlegend=True,
-                    text=[f"{val:.2f}" for val in daily_mileage],
+                    name=mob_data_ext.labels_clusters[idx_cluster],
+                    legendgroup=mob_data_ext.labels_clusters[idx_cluster],
+                    showlegend=show_legend,
+                    text=[f"{val:.2f}" for val in values],
                     textposition='auto',
                     insidetextanchor='start',
                     textangle=0
                 ),
-                row=1, col=1
-            )
-
-            fig.add_trace(
-                go.Bar(
-                    y=typedays,
-                    x=daily_triptime,
-                    marker_color=cluster_color,
-                    orientation='h',
-                    name=self._legend_clusters[cluster-1],
-                    showlegend=False,
-                    legendgroup=self._legend_clusters[cluster-1],
-                    text=[f"{val:.2f}" for val in daily_triptime],
-                    textposition='auto',
-                    insidetextanchor='start',
-                    textangle=0
-                ),
-                row=1, col=2
-            )
-
-            fig.add_trace(
-                go.Bar(
-                y=typedays,
-                x=n_trips_per_day,
-                marker_color=cluster_color,
-                orientation='h',
-                name=self._legend_clusters[cluster-1],
-                legendgroup=self._legend_clusters[cluster-1],
-                showlegend=False,
-                text=[f"{val:.2f}" for val in n_trips_per_day],
-                textposition='auto', 
-                insidetextanchor='start',
-                textangle=0
-                ),
-                row=1, col=3
-            )
+                row=1, col=idx_metrix+1
+                )
 
         # Update axes and layout
-        fig.update_xaxes(title_text="Daily kilometrage in km", row=1, col=1)
-        fig.update_xaxes(title_text="Daily journey time in h", row=1, col=2)
-        fig.update_xaxes(title_text="Daily number of journeys", row=1, col=3)
+        for idx_metrix, metric in enumerate(metrics): 
+            fig.update_xaxes(title_text=metric, row=1, col=idx_metrix+1)
 
         fig.update_layout(
             showlegend=True,
@@ -425,10 +245,10 @@ class MobPlotter:
         Returns:
         fig: Plotly figure object.
         """
-        mob_data_ext = self._parse_mob_data(mob_data)
+        mob_data_ext = parse_mob_data(mob_data, splitdays=False)
+        self._store_locations_clusters(mob_data_ext)
 
         # legt clusters and legend of clusters
-        self._get_legend_clusters(mob_data_ext)
         clusters = self._clusters
 
         # Initialize data containers
@@ -448,22 +268,22 @@ class MobPlotter:
         # Process data for each cluster
         for idx, cluster in enumerate(clusters):
             # Filter data for the current cluster
-            cluster_data = mob_data_ext.extract_cluster(cluster_id=cluster, copy=False)
+            cluster_data = mob_data_ext.extract_cluster(id_cluster=cluster, copy=False)
 
             # Per day
-            t_mob_char_day = self.calc_mob_char(cluster_data, 
+            t_mob_char_day = MobilityCharacteristics(cluster_data, 
                                                 typedays=TypeDays(groups=[[0,1,2,3,4,5,6]]),
                                                 grouping='day', 
-                                                calc_share_at_locations=False)
+                                                calc_share_at_locations=False).df
             daily_mileage_per_day[idx] = t_mob_char_day.at[0,'daily_kilometrage']
             triptime_per_day[idx] = t_mob_char_day.at[0, 'daily_journey_time']
             n_trips_per_day[idx] = t_mob_char_day.at[0, 'number_journeys_per_day']
 
             # Per vehicle
-            t_mob_char_vehicle = self.calc_mob_char(cluster_data, 
+            t_mob_char_vehicle = MobilityCharacteristics(cluster_data, 
                                                 typedays=TypeDays(groups=[[0,1,2,3,4,5,6]]),
                                                 grouping='vehicle', 
-                                                calc_share_at_locations=False)
+                                                calc_share_at_locations=False).df
             daily_mileage_per_vehicle[idx] = t_mob_char_vehicle.at[0,'daily_kilometrage']
             triptime_per_vehicle[idx] = t_mob_char_vehicle.at[0,'daily_journey_time']
             n_trips_per_vehicle[idx] = t_mob_char_vehicle.at[0,'number_journeys_per_day']
@@ -498,7 +318,7 @@ class MobPlotter:
             annotation['y'] += 0.02  # Adjust the y-position to move the title higher
 
         # create histograms per day
-        fig = self._plot_sub_hist(fig=fig, data=daily_mileage_per_day,  row=1, col=1, string_xlabel='Daily kilometrage in km', step=20)
+        fig = self._plot_sub_hist(fig=fig, data=daily_mileage_per_day, row=1, col=1, string_xlabel='Daily kilometrage in km', step=20)
         fig = self._plot_sub_hist(fig=fig, data=triptime_per_day, row=1, col=2, string_xlabel='Daily journey time in h')
         fig = self._plot_sub_hist(fig=fig, data=n_trips_per_day, row=1, col=3, string_xlabel='Number of journey')
         fig = self._plot_sub_hist(fig=fig, data=daily_mileage_per_vehicle, row=2, col=1, string_xlabel='Daily kilometrage in km', step=10)
@@ -532,11 +352,10 @@ class MobPlotter:
 
     def _plot_sub_hist(self, 
                        fig: go.Figure, 
-                       data: list[np.ndarray], 
+                       data: list[np.ndarray],
                        row: int, 
                        col: int, 
                        string_xlabel: Optional[str]=None, 
-                       string_title:Optional[str]=None, 
                        step: Optional[int]=1) ->go.Figure:
         """Internal function to create subplots of the histogram of mobility characteristics.
         Parameters:
@@ -626,16 +445,15 @@ class MobPlotter:
         share_loc: Matrix containing the share at locations for each timestep of the week.
         """
         # Parse mob_data to ensure it is MobDataExtended
-        mob_data_ext = self._parse_mob_data(mob_data)
+        mob_data_ext = parse_mob_data(mob_data, splitdays=True)
         mob_data_ext_df = mob_data_ext.df
 
         # Check clusters and legend of clusters
-        self._get_legend_clusters(mob_data_ext)
+        self._store_locations_clusters(mob_data_ext)
         n_clusters = len(self._clusters)
 
         # Determine unique locations and set default location order
-        unique_locations = mob_data_ext_df['location'].unique()
-        self._unique_locations = unique_locations
+        unique_locations = np.array(self._unique_locations)
         if self._location_order is None or len(self._location_order) == 0 or len(self._location_order) != len(unique_locations):
             self._location_order = [0] + list(unique_locations[(unique_locations != 0) & (unique_locations != 1)]) + [1]
 
@@ -662,7 +480,7 @@ class MobPlotter:
 
         # Vektorisierte Berechnung der Aufenthaltsmatrix für alle Cluster und Locations
         for cluster_idx, cluster in enumerate(self._clusters):
-            cluster_data = mob_data_ext_df[mob_data_ext_df['cluster'] == cluster]
+            cluster_data = mob_data_ext_df[mob_data_ext_df['id_cluster'] == cluster]
             starts = cluster_data["start_index"].values
             ends = cluster_data["end_index"].values-1
             ends[ends < 0] = n_timesteps_week-1
@@ -790,7 +608,7 @@ class MobPlotter:
         fig = subplots.make_subplots(
             rows=len(self._location_order), cols=1,
             shared_xaxes=True,
-            vertical_spacing=0.1,
+            vertical_spacing=0.22,
             subplot_titles=[self._location_labels[i] for i in range(len(self._location_order))]
         )
 
@@ -879,6 +697,13 @@ class MobPlotter:
 
         return fig
     
+    def _store_locations_clusters(self, mob_data_ext):
+        """Internal function to store the locations and clusters."""
+        self._clusters = mob_data_ext.clusters
+        self._legend_clusters = mob_data_ext.labels_clusters
+        self._unique_locations = mob_data_ext.locations
+        self._legend_locations = mob_data_ext.labels_locations
+    
         # Plot the colors from _rgb_color
     def show_rgb_colors(self):
         df = pd.DataFrame({
@@ -908,19 +733,200 @@ class MobPlotter:
         if self._show:
             fig.show()
 
-    def _get_legend_clusters(self, mob_data_ext):
-        """Get the legend labels for the clusters.
-        """
-        clusters = mob_data_ext.df['cluster'].unique()
-        # Check legend_clusters
-        if mob_data_ext.labels_clusters is None or len(mob_data_ext.labels_clusters) != len(clusters) or mob_data_ext.labels_clusters == []:
-            legend_clusters = [f"Cluster {i}" for i in range(len(clusters))]
-        else:
-            legend_clusters = mob_data_ext.labels_clusters
+
+class MobilityCharacteristics():
+    """
+    Class to calculate mobility characteristics from mobility data as dataframe.
+
+    Parameters:
+    ---------- 
+    mob_data (MobData | MobDataExtended): Mobility data instance.
+    typedays (TypeDays): Define type of days. Default is weekdays and weekend.
+    grouping (str): The output table can be grouped by 'none', 'vehicle', or 'day'. Default is 'none'.
+    method (str): Method to determine the characteristics: 'mean', 'max', 'min'. Default is 'mean'.
+    clustering (bool): Whether to calculate the characteristics for clusters. Default is False.
+    calc_share_at_locations (bool): Whether to calculate the variable share_at_locations. Default is True.
+    
+    Returns:
+    ----------
+    pd.DataFrame: Overview table with mobility characteristics for the defined type of days.
+    1. daily_kilometrage (float): Daily kilometrage in km.
+    2. daily_journey_time (float): Daily journey time in h.
+    3. number_journeys_per_day (int): Number of journeys per day.
+    4. share_days_with_journeys (float): Share of days with journeys in %.
+    5. locations (list): Locations where the vehicle stayed.
+    6. share_of_time_at_locations (list[float]): Share of time spent at the locations in %.
+    """
+
+    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
+    def __init__(self,
+                mob_data: MobData | MobDataExtended,
+                typedays: TypeDays = TypeDays(groups=[[0,1,2,3,4,5,6]]),
+                grouping: Literal['none', 'vehicle', 'day'] = 'none',
+                method: Literal['mean', 'max', 'min'] = 'mean',
+                clustering: Optional[bool] = False,
+                calc_share_at_locations: bool = True):
         
-        self._clusters = clusters
-        self._legend_clusters = legend_clusters 
+        # Save time of splitting days if all weekdays are in one group
+        if len(typedays.groups) == 1:
+            splitdays = False
+        else:
+            splitdays = True
+    
+        mob_data_ext = parse_mob_data(mob_data, splitdays=splitdays)
 
+        if calc_share_at_locations and method != 'mean':
+            logger.warning('The variable <share_of_time_at_locations> can only be calculated for method = "mean".')
+            calc_share_at_locations = False
 
+        # Calculate mobility characteristics
+        self.df = self._calc_mob_char(mob_data_ext,
+                      typedays=typedays,
+                      grouping=grouping,
+                      method=method,
+                      clustering=clustering,
+                      calc_share_at_locations=calc_share_at_locations)
+    
+    def _calc_mob_char(self, mob_data_ext: MobDataExtended,
+                typedays: TypeDays,
+                grouping: Literal['none', 'vehicle', 'day'] = 'none',
+                method: Literal['mean', 'max', 'min'] = 'mean',
+                clustering: Optional[bool] = False,
+                calc_share_at_locations: bool = True) -> pd.DataFrame:
+        """
+        Internal Function to calculate mobility characteristics and save the values in an overview dataframe.
+        """
+        # Prepare extended mob data dataframe
+        mob_data_ext_df = mob_data_ext.df
+        mob_data_ext_df["weekday"] = mob_data_ext_df["start_dt"].dt.dayofweek # Monday=0, Sunday=6
+        mob_data_ext_df["index_typeday"] = mob_data_ext_df["weekday"].apply(typedays.weekday2typeday)
+        mob_data_ext_df['date'] = mob_data_ext_df['start_dt'].dt.normalize()
+        # Add a new column 'duration_driving' where 'duration' is retained if 'location' is 0, otherwise 0
+        mob_data_ext_df["duration_driving"] = np.where(mob_data_ext_df['location'] == 0, mob_data_ext_df['duration'], 0)
+        if clustering:
+            unique_id_cluster = mob_data_ext_df['id_cluster'].unique()
+        else:
+            unique_id_cluster = [1]
 
+        if method == 'mean':
+            pd_method = pd.Series.mean
+        elif method == 'min':
+            pd_method = pd.Series.min
+        elif method == 'max':
+            pd_method = pd.Series.max
+        else:
+            raise ValueError("Method must be one of ['mean', 'min', 'max']")
 
+        mob_char = []
+
+        for id_cluster in unique_id_cluster:
+            for index_typeday in typedays.index:
+                typeday_label = typedays.names[index_typeday]
+
+                # Filter rows for current type of days
+                mask_days = mob_data_ext_df['index_typeday'] == index_typeday
+                mask_clusters = mob_data_ext_df['id_cluster'] == id_cluster
+                mob_data_filtered = mob_data_ext_df[mask_days & mask_clusters]
+
+                # Group by vehicle and day
+                group = mob_data_filtered.groupby(['id_vehicle', 'date'])
+                group_vehicles = mob_data_filtered.groupby(['id_vehicle'])
+
+                # Vektorisierte Berechnungen
+                daily_mileage = group['distance'].sum()
+                daily_triptime = group['duration_driving'].sum() 
+                daily_n_trips = group['location'].apply(lambda x: (x == 0).sum())
+                daily_log_trips = group['location'].apply(lambda x: (x == 0).any())
+
+                # grouping
+                if grouping == 'none':
+                    if calc_share_at_locations:
+                        share_at_locations, locations = self._calc_share_of_time_at_locations(mob_data_filtered)
+                    stat_daily_mileage = pd_method(daily_mileage)
+                    stat_daily_triptime = pd_method(daily_triptime)
+                    stat_n_trips = pd_method(daily_n_trips)
+                    share_days_with_trips = pd_method(daily_log_trips)
+
+                elif grouping == 'day':
+                    if calc_share_at_locations:
+                        share_at_locations, locations = zip(*group.apply(lambda x: self._calc_share_of_time_at_locations(x)))
+                    stat_daily_mileage = daily_mileage
+                    stat_daily_triptime = daily_triptime
+                    stat_n_trips = daily_n_trips
+                    share_days_with_trips = daily_log_trips
+
+                elif grouping == 'vehicle':
+                    if calc_share_at_locations:
+                        share_at_locations, locations = zip(*group_vehicles.apply(lambda x: self._calc_share_of_time_at_locations(x)))
+                    stat_daily_mileage = daily_mileage.groupby(level='id_vehicle').agg(pd_method)
+                    stat_daily_triptime = daily_triptime.groupby(level='id_vehicle').agg(pd_method)
+                    stat_n_trips = daily_n_trips.groupby(level='id_vehicle').agg(pd_method)
+                    share_days_with_trips = daily_log_trips.groupby(level='id_vehicle').agg(pd_method)
+
+                # save results
+                mob_char.append({
+                    'typeday': typeday_label,
+                    'id_cluster': id_cluster,
+                    'daily_kilometrage': stat_daily_mileage.tolist(),
+                    'daily_journey_time': stat_daily_triptime.tolist(),
+                    'number_journeys_per_day': stat_n_trips.tolist(),
+                    'share_days_with_journeys': share_days_with_trips.tolist(),
+                    'locations': locations if calc_share_at_locations else None,
+                    'share_of_time_at_locations': share_at_locations if calc_share_at_locations else None
+                })
+
+        df_mob_char = pd.DataFrame(mob_char)
+        if clustering == False:
+            df_mob_char.drop(columns=['id_cluster'], inplace=True)
+        return df_mob_char
+
+    @staticmethod
+    def _calc_share_of_time_at_locations(mob_data_ext_df: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Calculate the share of time spent at each location.
+
+        Parameters:
+        location (np.ndarray | pd.Series): Array of location indices.
+
+        Returns:
+        tuple: share percentages and corresponding unique locations.
+        """    
+    
+        # Get total hours per vehicle
+        
+        total_hours = mob_data_ext_df.duration.sum()
+
+        # group by location and sum duration
+        location_duration_df = (
+            mob_data_ext_df
+            .groupby(["location"])["duration"]
+            .sum()
+            .reset_index()
+        )
+
+        location_duration_df.sort_values(by="location", inplace=True)
+
+        share_at_locations = location_duration_df["duration"] / total_hours * 100
+        locations = location_duration_df["location"]
+        
+        return share_at_locations.to_numpy(), locations.to_numpy()
+
+@validate_call(config=ConfigDict(arbitrary_types_allowed=True))   
+def parse_mob_data(mob_data: MobData | MobDataExtended, splitdays: bool = False) -> MobDataExtended:
+    """
+    Utility function to ensure the input mobility data is of type MobDataExtended.
+
+    Parameters:
+    mob_data (MobData | MobDataExtended): Input mobility data.
+    splitdays (Optional[bool]): Whether to split trips that span multiple days when converting MobData to MobDataExtended. 
+                        Default is False.
+
+    Returns:
+    MobDataExtended: Parsed mobility data.
+    """
+    if isinstance(mob_data, MobDataExtended):
+        return mob_data
+    elif isinstance(mob_data, MobData):
+        return MobDataExtended(mob_data, splitdays=splitdays)
+    else:
+        raise TypeError("mob_data must be an instance of MobData or MobDataExtended.")
