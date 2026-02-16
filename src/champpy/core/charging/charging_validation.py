@@ -17,7 +17,6 @@ from champpy.core.charging.charging_model import ChargingData, ChargingArray
 from champpy.core.mobility.mobility_data import MobData, MobDataExtended
 from champpy.utils.time_utils import TypeDays, get_week_index
 from champpy.utils.data_utils import get_plot_path
-from champpy.core.base_validation import BaseCharacteristics
 
 logger = logging.getLogger(__name__)
 
