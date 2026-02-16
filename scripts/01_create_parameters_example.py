@@ -3,7 +3,7 @@ import os
 import champpy
 
 # Load example raw data from CSV
-#--------------------------------------------------------
+# --------------------------------------------------------
 # Load example raw logbook data from CSV
 base_dir = os.getcwd()
 logbook_path = os.path.join(base_dir, "data", "raw_data", "example1", "t_logbook.csv")
@@ -12,20 +12,20 @@ raw_logbook_df = pd.read_csv(logbook_path, parse_dates=["dep_dt", "arr_dt"])
 
 # Load example raw vehicle data from CSV
 vehicle_path = os.path.join(base_dir, "data", "raw_data", "example1", "t_vehicle.csv")
-raw_vehicle_df = pd.read_csv(vehicle_path, parse_dates=["first_day", "last_day"],date_format="%d-%b-%Y")
+raw_vehicle_df = pd.read_csv(vehicle_path, parse_dates=["first_day", "last_day"], date_format="%d-%b-%Y")
 
 # Create raw mobility profiles
 raw_profiles = champpy.MobData(input_logbooks_df=raw_logbook_df, input_vehicles_df=raw_vehicle_df)
 
-# Clean the raw mobility profiles 
-#--------------------------------------------------------
+# Clean the raw mobility profiles
+# --------------------------------------------------------
 # Initialize the data cleaner with user parameters
 user_params_cleaning = champpy.UserParamsCleaning(
-    speed = champpy.LimitConfig(min_value=0.01, min_method="delete", max_value=120.0, max_method="cap"),
-	duration = champpy.LimitConfig(min_value=0.25, min_method="delete", max_value=8.0, max_method="cap"),
-	distance = champpy.LimitConfig(min_value=0.5, min_method="delete", max_value=500.0, max_method="cap"),
-	temp_res = 0.25,  # Temporal resolution in hours
-	print_summary = True
+    speed=champpy.LimitConfig(min_value=0.01, min_method="delete", max_value=120.0, max_method="cap"),
+    duration=champpy.LimitConfig(min_value=0.25, min_method="delete", max_value=8.0, max_method="cap"),
+    distance=champpy.LimitConfig(min_value=0.5, min_method="delete", max_value=500.0, max_method="cap"),
+    temp_res=0.25,  # Temporal resolution in hours
+    print_summary=True,
 )
 data_cleaner = champpy.MobDataCleaner(user_params=user_params_cleaning)
 
@@ -41,9 +41,9 @@ mob_profile_cleaned.locations.update_locations(locations_df)
 # --------------------------------------------------------
 # Define user params for the parameterization
 user_params = champpy.UserParamsParameterizer(
-    description="Example parameterization 1", # Define a description for the parameter set
-    vehicle_type="Van", # Type of vehicle the parameters apply to (e.g., "Car", "Van", "Truck")
-    temp_res = 0.25  # Temporal resolution in hours
+    description="Example parameterization 1",  # Define a description for the parameter set
+    vehicle_type="Van",  # Type of vehicle the parameters apply to (e.g., "Car", "Van", "Truck")
+    temp_res=0.25,  # Temporal resolution in hours
 )
 # Create an instance of the Parameterizer
 example_parameterizer = champpy.Parameterizer(user_params)
@@ -69,8 +69,7 @@ mob_data_merged.add_mob_data(mob_profiles, old_cluster_label="Ref", new_cluster_
 
 # Initialize user parameters for plotting the mobiltiy profiles
 user_params_plot = champpy.UserParamsMobPlotter(
-    filename="example_mobility_profiles_validation_plot.html",
-    clustering = False
+    filename="example_mobility_profiles_validation_plot.html", clustering=False
 )
 
 # Create instance of the mobility plotter
@@ -80,5 +79,5 @@ mobplot = champpy.MobPlotter(user_params_plot)
 mobplot.plot_mob_data(mob_data_merged)
 
 # Save Parameters
-params_loader= champpy.ParamsLoader()
+params_loader = champpy.ParamsLoader()
 params_loader._save_params(model_params)

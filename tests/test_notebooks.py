@@ -15,17 +15,17 @@ def notebooks_dir():
 def run_notebook_with_nbconvert(notebook_path):
     """
     Execute a Jupyter notebook using nbconvert.
-    
+
     Parameters:
     notebook_path (Path): Path to the notebook to execute.
-    
+
     Raises:
     RuntimeError: If notebook execution fails.
     """
     # Create temporary output file
     with tempfile.NamedTemporaryFile(suffix=".ipynb", delete=False) as tmp:
         output_notebook = tmp.name
-    
+
     try:
         result = subprocess.run(
             [
@@ -40,14 +40,12 @@ def run_notebook_with_nbconvert(notebook_path):
             ],
             capture_output=True,
             text=True,
-            timeout=660  # 11 minutes total timeout
+            timeout=660,  # 11 minutes total timeout
         )
-        
+
         if result.returncode != 0:
-            raise RuntimeError(
-                f"Notebook execution failed:\n{result.stdout}\n{result.stderr}"
-            )
-            
+            raise RuntimeError(f"Notebook execution failed:\n{result.stdout}\n{result.stderr}")
+
     except subprocess.TimeoutExpired:
         raise RuntimeError(f"Notebook execution timed out: {notebook_path}")
     finally:

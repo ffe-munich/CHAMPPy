@@ -8,6 +8,7 @@ from champpy.core.mobility.parameterization import Parameterizer, UserParamsPara
 from champpy.core.mobility.mobility_model import MobModel, UserParamsMobModel
 from champpy.core.mobility.mobility_validation import MobPlotter, UserParamsMobPlotter
 
+
 @pytest.mark.usefixtures("raw_logbook_df", "raw_vehicle_df")
 def test_full_pipeline(mob_data1):
     mob_profile = mob_data1
@@ -45,11 +46,6 @@ def test_full_pipeline(mob_data1):
     clusters_df.loc[clusters_df["id_cluster"] == 1, "label"] = "Ref"
     clusters_df.loc[clusters_df["id_cluster"] == 2, "label"] = "Model"
     mob_data_merged.clusters.update_clusters(clusters_df)
-    user_params_plot = UserParamsMobPlotter(
-        filename="mobility_profiles_plot.html"
-    )
+    user_params_plot = UserParamsMobPlotter(filename="mobility_profiles_plot.html")
     mobplot = MobPlotter(user_params_plot)
     mobplot.plot_mob_data(mob_data_merged)
-
-
-

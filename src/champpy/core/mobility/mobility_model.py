@@ -12,8 +12,8 @@ from champpy.core.mobility.mobility_data import MobData
 from champpy.core.mobility.parameterization import ModelParams
 from champpy.utils.time_utils import get_day_index, get_datetime_array, TypeDays
 
-
 logger = logging.getLogger(__name__)
+
 
 @dataclass
 class UserParamsMobModel:
@@ -22,12 +22,13 @@ class UserParamsMobModel:
     Args:
         n_clusters: Number of clusters to use in the mobility model.
     """
-    number_vehicles: int = 50 # Number of vehicles to generate mobility profiles for
-    start_date: pd.Timestamp = pd.Timestamp("2025-01-01") # Start date for the mobility profiles
-    end_date: pd.Timestamp = pd.Timestamp("2025-12-31") # End date for the mobility profiles
-    random_seed: int = 1 # Random seed for reproducibility
-    days_buffer: int = 1 # Buffer days before and after start and end date to avoid edge effects
-    first_loc: int = 1 # 
+
+    number_vehicles: int = 50  # Number of vehicles to generate mobility profiles for
+    start_date: pd.Timestamp = pd.Timestamp("2025-01-01")  # Start date for the mobility profiles
+    end_date: pd.Timestamp = pd.Timestamp("2025-12-31")  # End date for the mobility profiles
+    random_seed: int = 1  # Random seed for reproducibility
+    days_buffer: int = 1  # Buffer days before and after start and end date to avoid edge effects
+    first_loc: int = 1  #
 
     def __post_init__(self):
         # Validate number of vehicles: positive integer
@@ -35,12 +36,13 @@ class UserParamsMobModel:
             message = "Number of vehicles must be at least 1."
             logging.error(message)
             raise ValueError(message)
-        
+
         # Validate start_date and end_date format: start must be before end and at least one day apart
         if self.start_date.date() >= self.end_date.date():
             message = "Start date must be at least one day before end date."
             logging.error(message)
-            raise ValueError(message)       
+            raise ValueError(message)
+
 
 class MobModel:
     """
@@ -48,13 +50,18 @@ class MobModel:
     Args:
         model_params: ModelParams dataclass containing mobility model parameters.
     """
+
     def __init__(self, model_params: ModelParams):
         self.model_params = model_params
 
     def generate_mob_profiles(self, user_params: UserParamsMobModel) -> MobData:
 
-        logger.info("Start generating mobility profiles for %d vehicles from %s to %s",
-                    user_params.number_vehicles, user_params.start_date, user_params.end_date)
+        logger.info(
+            "Start generating mobility profiles for %d vehicles from %s to %s",
+            user_params.number_vehicles,
+            user_params.start_date,
+            user_params.end_date,
+        )
 
         # Set random seed
         np.random.seed(user_params.random_seed)
@@ -69,17 +76,17 @@ class MobModel:
             self._generate_location(t)
             for v in range(self._number_vehicles):
                 location_t = self._location_array[t, v]
-                location_tminus1 = self._location_array[t-1, v]
+                location_tminus1 = self._location_array[t - 1, v]
                 # Identify start and end of journeys
                 if location_t == 0 and location_tminus1 != 0 and t != self._number_steps - 1:
                     # Start of a new journey
                     self._start_journey_array[t, v] = True
                     previous_start[v] = t
 
-                elif (location_t >0 or t == (self._number_steps - 1)) and location_tminus1 == 0: 
+                elif (location_t > 0 or t == (self._number_steps - 1)) and location_tminus1 == 0:
                     # End of the current journey
                     journey_duration_h = (t - previous_start[v]) * self.model_params.info.temp_res
-                    self._duration_array[previous_start[v],v] = journey_duration_h
+                    self._duration_array[previous_start[v], v] = journey_duration_h
                     if t == (self._number_steps - 1):
                         # Intervene if journey ends at the last time step
                         # Set location to most frequent location:
@@ -93,7 +100,7 @@ class MobModel:
         mob_profiles = self._convert_arrays2mob_profiles()
 
         return mob_profiles
-    
+
     def _predefine_vars(self, user_params: UserParamsMobModel) -> None:
         """
         Predefine variables for the mobility model.
@@ -104,12 +111,12 @@ class MobModel:
         self._number_vehicles = user_params.number_vehicles
 
         # Datetime array mit Buffer über Utility-Funktion
-        (self._dt_array, self._mask_buffer) = get_datetime_array(
-                                                        start_date = user_params.start_date,
-                                                        end_date = user_params.end_date,
-                                                        temp_res = self.model_params.info.temp_res,
-                                                        number_days_buffer = user_params.days_buffer
-                                                    )
+        self._dt_array, self._mask_buffer = get_datetime_array(
+            start_date=user_params.start_date,
+            end_date=user_params.end_date,
+            temp_res=self.model_params.info.temp_res,
+            number_days_buffer=user_params.days_buffer,
+        )
         self._number_steps = len(self._dt_array)
 
         self._index_day_array = get_day_index(self._dt_array, self.model_params.info.temp_res)
@@ -128,7 +135,7 @@ class MobModel:
 
         # split vehicles into clusters
         cluster_array = self._split_vehicles_per_cluster(self._number_vehicles)
-    
+
         # Determine index of parameters based on cluster_array and typedays_array
         self._index_params_array = (
             self.model_params.df.reset_index()
@@ -136,23 +143,31 @@ class MobModel:
             .loc[typedays_array, cluster_array]
             .to_numpy()
         )
-        
+
         # Initialize arrays for location, speed, distance, duration (sparse for speed, distance, duration)
-        self._location_array = np.zeros((self._number_steps, self._number_vehicles), dtype=int) # location of vehicles
-        self._speed_array = np.zeros((self._number_steps, self._number_vehicles), dtype=float) # speed of journeys (sparse)
-        self._distance_array = np.zeros((self._number_steps, self._number_vehicles), dtype=float) # distance of journeys (sparse)
-        self._duration_array = np.zeros((self._number_steps, self._number_vehicles), dtype=float) # duration of journeys (sparse)
-        self._start_journey_array = np.zeros((self._number_steps, self._number_vehicles), dtype=bool) # start of journeys
+        self._location_array = np.zeros((self._number_steps, self._number_vehicles), dtype=int)  # location of vehicles
+        self._speed_array = np.zeros(
+            (self._number_steps, self._number_vehicles), dtype=float
+        )  # speed of journeys (sparse)
+        self._distance_array = np.zeros(
+            (self._number_steps, self._number_vehicles), dtype=float
+        )  # distance of journeys (sparse)
+        self._duration_array = np.zeros(
+            (self._number_steps, self._number_vehicles), dtype=float
+        )  # duration of journeys (sparse)
+        self._start_journey_array = np.zeros(
+            (self._number_steps, self._number_vehicles), dtype=bool
+        )  # start of journeys
 
         # Set first location for all vehicles
-        self._location_array [0, :] = user_params.first_loc
+        self._location_array[0, :] = user_params.first_loc
 
     def _split_vehicles_per_cluster(self, number_vehicles: int) -> np.ndarray:
         """
         Split the total number of vehicles into clusters based on the model parameters.
         Args:
             number_vehicles: Total number of vehicles to split.
-        
+
         Returns:
             dict[int, int]: Dictionary with cluster ID as key and number of vehicles as value.
         """
@@ -163,16 +178,16 @@ class MobModel:
             # Assign remaining vehicles to the largest cluster
             largest_cluster = vehicles_per_cluster.idxmax()
             vehicles_per_cluster[largest_cluster] += rest
-        
+
         # Create array with cluster IDs for each vehicle
         cluster_array = np.zeros(number_vehicles, dtype=int)
         current_idx = 0
         for cluster_id, n_vehicles in vehicles_per_cluster.items():
-            cluster_array[current_idx:current_idx + n_vehicles] = cluster_id
+            cluster_array[current_idx : current_idx + n_vehicles] = cluster_id
             current_idx += n_vehicles
 
         return cluster_array
-    
+
     def _generate_location(self, t) -> None:
         """
         Generate the locations for all vehicle for one timestep based on the transition matrix.
@@ -181,7 +196,7 @@ class MobModel:
         """
         # Parameter index, previous location and day index for all vehicles
         params_idx = self._index_params_array[t, :]
-        loc_tminus1 = self._location_array[t-1, :]
+        loc_tminus1 = self._location_array[t - 1, :]
         day_idx = self._index_day_array[t]
 
         # Transition vectors and cumulative transition vectors for all vehicles
@@ -210,18 +225,22 @@ class MobModel:
 
         # identify idx_duration for all journeys
         idx_duration_jarray = np.searchsorted(edges_duration, duration_jarray, side="right") - 1
-        max_index_duration = len(edges_duration)-2
-        idx_duration_jarray = np.minimum(idx_duration_jarray, max_index_duration) # cap at max index
+        max_index_duration = len(edges_duration) - 2
+        idx_duration_jarray = np.minimum(idx_duration_jarray, max_index_duration)  # cap at max index
 
         # Get speed distribution parameters for all journeys (vectorized, no loop)
-        speed_param1_full = np.array(self.model_params.df["speed_dist_param1"].to_list())  # shape: (n_paramsets, n_bins)
+        speed_param1_full = np.array(
+            self.model_params.df["speed_dist_param1"].to_list()
+        )  # shape: (n_paramsets, n_bins)
         speed_param1_jarray = speed_param1_full[index_params_jarray, idx_duration_jarray]
-        speed_param2_full = np.array(self.model_params.df["speed_dist_param2"].to_list())  # shape: (n_paramsets, n_bins)
+        speed_param2_full = np.array(
+            self.model_params.df["speed_dist_param2"].to_list()
+        )  # shape: (n_paramsets, n_bins)
         speed_param2_jarray = speed_param2_full[index_params_jarray, idx_duration_jarray]
         speed_max_array = self.model_params.df["speed_max"].to_numpy()[index_params_jarray]
 
         # Generate random numbers for all journeys where duration > 0
-        rand2_array = np.random.rand(number_journeys )
+        rand2_array = np.random.rand(number_journeys)
 
         # Generate speed for all journeys (vectorized, no loop)
         speed_jarray = beta.ppf(rand2_array, speed_param1_jarray, speed_param2_jarray) * speed_max_array
@@ -247,48 +266,51 @@ class MobModel:
         self._location_array = self._location_array[~self._mask_buffer, :]
         self._speed_array = self._speed_array[~self._mask_buffer, :]
 
-        # convert location idx into location IDs 
+        # convert location idx into location IDs
         self._location_array = self.model_params.info.locations[self._location_array]
-        
+
         # get rows and cols of journeys
         rows, cols = np.nonzero(self._start_journey_array)
-        sort_idx = np.lexsort((rows, cols)) # sort by vehicle and time 
+        sort_idx = np.lexsort((rows, cols))  # sort by vehicle and time
         rows_sorted = rows[sort_idx]
         cols_sorted = cols[sort_idx]
 
         # Predefine empty logbook DataFrame
         logbook_df = pd.DataFrame()
-        logbook_df["id_vehicle"] = cols_sorted + 1 # vehicle IDs start at 1
+        logbook_df["id_vehicle"] = cols_sorted + 1  # vehicle IDs start at 1
         logbook_df["dep_dt"] = self._dt_array[rows_sorted]
-        logbook_df["arr_dt"] = self._dt_array[rows_sorted] + pd.to_timedelta(self._duration_array[rows_sorted, cols_sorted], unit="h")
-        logbook_df["dep_loc"] = self._location_array[rows_sorted-1, cols_sorted]
-        step_end_journey = rows_sorted +(self._duration_array[rows_sorted, cols_sorted] / self.model_params.info.temp_res).round().astype(int)
+        logbook_df["arr_dt"] = self._dt_array[rows_sorted] + pd.to_timedelta(
+            self._duration_array[rows_sorted, cols_sorted], unit="h"
+        )
+        logbook_df["dep_loc"] = self._location_array[rows_sorted - 1, cols_sorted]
+        step_end_journey = rows_sorted + (
+            self._duration_array[rows_sorted, cols_sorted] / self.model_params.info.temp_res
+        ).round().astype(int)
         logbook_df["arr_loc"] = self._location_array[step_end_journey, cols_sorted]
         logbook_df["distance"] = self._distance_array[rows_sorted, cols_sorted]
 
         # Create vehicle DataFrame
-        first_day = self._dt_array[0].floor('D')
-        last_day = self._dt_array[-1].floor('D')
-        id_cluster = self.model_params.df.id_cluster[self._index_params_array[1,:]]
-        vehicle_df = pd.DataFrame({
-			"id_vehicle": range(1, self._number_vehicles + 1),
-			"first_day": [first_day] * self._number_vehicles,
-			"last_day":  [last_day] * self._number_vehicles,
-			"id_cluster":   id_cluster.tolist(),
-            "first_loc": self._location_array[0, :],
-		})
-
-        mob_profiles = MobData(
-            input_logbooks_df=logbook_df,
-            input_vehicles_df=vehicle_df
+        first_day = self._dt_array[0].floor("D")
+        last_day = self._dt_array[-1].floor("D")
+        id_cluster = self.model_params.df.id_cluster[self._index_params_array[1, :]]
+        vehicle_df = pd.DataFrame(
+            {
+                "id_vehicle": range(1, self._number_vehicles + 1),
+                "first_day": [first_day] * self._number_vehicles,
+                "last_day": [last_day] * self._number_vehicles,
+                "id_cluster": id_cluster.tolist(),
+                "first_loc": self._location_array[0, :],
+            }
         )
+
+        mob_profiles = MobData(input_logbooks_df=logbook_df, input_vehicles_df=vehicle_df)
 
         # Update location labels
         locations_df = mob_profiles.locations.df
         locations_df["label"] = self.model_params.info.labels_locations
         mob_profiles.locations.update_locations(locations_df)
 
-        # Update cluster labels   
+        # Update cluster labels
         clusters_df = mob_profiles.clusters.df
         clusters_df["label"] = self.model_params.info.labels_clusters
         mob_profiles.clusters.update_clusters(clusters_df)
