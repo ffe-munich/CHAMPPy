@@ -1,6 +1,5 @@
 """Test of mob classesand their methods."""
 
-import pytest
 import pandas as pd
 from champpy.core.mobility.mobility_data import MobDataExtended
 

@@ -1,6 +1,5 @@
 """Test of the validation module of champpy."""
 
-import pytest
 import pandas as pd
 from champpy.core.mobility.mobility_validation import MobPlotter, UserParamsMobPlotter, MobilityCharacteristics
 from champpy.utils.time_utils import TypeDays

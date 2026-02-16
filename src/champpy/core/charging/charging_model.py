@@ -1,6 +1,5 @@
 import logging
 import pandas as pd
-import pandera.pandas as pa
 import numpy as np
 
 from rich.progress import track
@@ -8,7 +7,6 @@ from pandera.pandas import Field as pa_Field
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 from pydantic import field_validator, Field as pydantic_Field
 from dataclasses import dataclass, field
-from typing import Literal
 
 from champpy.core.mobility.mobility_components import Vehicles, VehiclesSchema, Clusters
 from champpy.core.mobility.mobility_data import MobArray, MobData

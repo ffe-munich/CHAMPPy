@@ -2,10 +2,8 @@ import logging
 import pandas as pd
 import numpy as np
 
-from typing import Tuple
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from rich.progress import track
-from pandera.typing import Series
 from scipy.stats import beta, mode
 
 from champpy.core.mobility.mobility_data import MobData

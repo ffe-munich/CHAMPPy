@@ -1,20 +1,16 @@
 import pandas as pd
-import numpy as np
 import webbrowser
-import os
 import logging
 import base64
 from importlib.resources import files
 from pathlib import Path
 
-from plotly import graph_objs as go, express as px, subplots
+from plotly import graph_objs as go, subplots
 from typing import Literal, Optional
 from pydantic import ConfigDict, validate_call
 from pydantic.dataclasses import dataclass as pydantic_dataclass
-from rich.progress import Progress
 from dataclasses import field
-from champpy.core.charging.charging_model import ChargingData, ChargingArray
-from champpy.core.mobility.mobility_data import MobData, MobDataExtended
+from champpy.core.charging.charging_model import ChargingData
 from champpy.utils.time_utils import TypeDays, get_week_index
 from champpy.utils.data_utils import get_plot_path
 

@@ -10,7 +10,6 @@ from plotly import graph_objs as go, express as px, subplots
 from typing import Literal, Optional
 from pydantic import ConfigDict, validate_call
 from pydantic.dataclasses import dataclass as pydantic_dataclass
-from rich.progress import Progress
 from dataclasses import field
 from champpy.core.mobility.mobility_data import MobData, MobDataExtended
 from champpy.utils.time_utils import TypeDays, get_week_index

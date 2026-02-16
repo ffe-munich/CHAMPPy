@@ -3,7 +3,7 @@ import numpy as np
 from typing import Literal
 import logging
 
-from pydantic import validate_call, ConfigDict
+from pydantic import validate_call
 from champpy.core.mobility.mobility_components import Logbooks, Vehicles, Clusters, Locations
 from champpy.utils.time_utils import get_datetime_array
 
