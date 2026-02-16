@@ -1,4 +1,4 @@
-import datetime
+import pandas as pd
 import pandas as pd
 import numpy as np
 import logging
@@ -26,7 +26,7 @@ def _parse_datetime(dt) -> pd.Series:
         logger.error(mssg)
         raise ValueError(mssg)
     
-def get_day_index(dt:  pd.Series | str | pd.Timestamp | datetime.datetime, temp_res: float) -> int | pd.Series:
+def get_day_index(dt:  pd.Timestamp | pd.Series | str, temp_res: float) -> pd.Series:
     """
     Get the index of a time within a day based on temporal resolution.
     
@@ -35,7 +35,7 @@ def get_day_index(dt:  pd.Series | str | pd.Timestamp | datetime.datetime, temp_
         temp_res: temporal resolution in hours
     
     Returns:
-        int or pd.Series: index within the day (0-based)
+        pd.Series: index within the day (0-based)
     
     Example:
         temp_res = 1.0 (hourly)
@@ -56,10 +56,10 @@ def get_day_index(dt:  pd.Series | str | pd.Timestamp | datetime.datetime, temp_
         dtype: int64
     """
     dt = _parse_datetime(dt)
-    hour = dt.dt.hour + dt.dt.minute / 60 + dt.dt.second / 3600
-    return (hour / temp_res).astype(int)
+    hour = dt.dt.hour + dt.dt.minute / 60 + dt.dt.second / 3600 
+    return pd.Series((hour / temp_res).astype(int), index=dt.index)
 
-def get_week_index(dt: pd.Timestamp | pd.Series, temp_res: float) -> int | pd.Series:
+def get_week_index(dt: pd.Timestamp | pd.Series | str, temp_res: float) -> pd.Series:
     """
     Get the index within a week based on temporal resolution.
     
@@ -68,7 +68,7 @@ def get_week_index(dt: pd.Timestamp | pd.Series, temp_res: float) -> int | pd.Se
         temp_res: temporal resolution in hours
     
     Returns:
-        int or pd.Series: index within the week (0-based)
+        pd.Series: index within the week (0-based)
     
     Example:
         temp_res = 1.0 (hourly)
@@ -95,7 +95,31 @@ def get_week_index(dt: pd.Timestamp | pd.Series, temp_res: float) -> int | pd.Se
     weekday = dt.dt.dayofweek  # Monday=0, Sunday=6
     day_idx = get_day_index(dt, temp_res)
     indices_per_day = int(24 / temp_res)
-    return weekday * indices_per_day + day_idx
+    return pd.Series(weekday * indices_per_day + day_idx, index=dt.index)
+
+def get_datetime_array(start_date: pd.Timestamp, 
+                          end_date: pd.Timestamp, 
+                          temp_res: float, 
+                          number_days_buffer: int = 0) -> tuple[pd.DatetimeIndex, pd.Series]:
+    """
+    Create a datetime array with buffer days before and after the actual period.
+    Returns (dt_array, mask_buffer).
+
+    Parameters:
+        start_date (pd.Timestamp): Start date of the actual period.
+        end_date (pd.Timestamp): End date of the actual period.
+        temp_res (float): Temporal resolution in hours.
+        number_days_buffer (int): Number of buffer days before and after the period.
+    """
+    start_dt_wo_buffer = start_date.normalize()
+    start_dt = start_dt_wo_buffer - pd.Timedelta(days=number_days_buffer)
+    end_dt_wo_buffer = end_date.normalize() + pd.Timedelta(days=1) - pd.Timedelta(hours=temp_res)
+    end_dt = end_dt_wo_buffer + pd.Timedelta(days=number_days_buffer)
+    frequency = f"{temp_res}h"
+    dt_array = pd.date_range(start=start_dt, end=end_dt, freq=frequency)
+
+    mask_buffer = (dt_array < start_dt_wo_buffer) | (dt_array > end_dt_wo_buffer)
+    return dt_array, mask_buffer
 
 class TypeDays:
     def __init__(self, groups: list[list[int]] = [[0],[1],[2],[3],[4],[5],[6]]):
