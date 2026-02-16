@@ -1,0 +1,42 @@
+name: Lint
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  black:
+    name: Black Code Formatter
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+      
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+      
+      - name: Run Black
+        run: black -l 120 --check ./src/champpy/ ./tests/
+
+  flake8:
+    name: Flake8 Linting
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+      
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+      
+      - name: Run Flake8
+        run: flake8 --max-line-length=120 --ignore=E501,E712,E203,W503 ./src/champpy/ ./tests/

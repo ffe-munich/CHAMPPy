@@ -1,0 +1,6 @@
+# Ignore all HTML files
+*.html
+
+# But keep demo01 and demo02
+!demo01_*.html
+!demo02_*.html
