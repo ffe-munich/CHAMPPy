@@ -1,19 +1,16 @@
 import logging
 import pandas as pd
 import numpy as np
-import os
-import pandera.pandas as pa
 
 from typing import Tuple
 from dataclasses import dataclass, field
 from rich.progress import track
 from pandera.typing import Series
 from scipy.stats import beta, mode
-from scipy import sparse
 
-from champpy.core.mobility_data import MobData, LogbookSchema
-from champpy.core.parameterization import ModelParams
-from champpy.utils.time_utils import get_day_index, TypeDays
+from champpy.core.mobility.mobility_data import MobData
+from champpy.core.mobility.parameterization import ModelParams
+from champpy.utils.time_utils import get_day_index, get_datetime_array, TypeDays
 
 
 logger = logging.getLogger(__name__)
@@ -29,6 +26,8 @@ class UserParamsMobModel:
     start_date: pd.Timestamp = pd.Timestamp("2025-01-01") # Start date for the mobility profiles
     end_date: pd.Timestamp = pd.Timestamp("2025-12-31") # End date for the mobility profiles
     random_seed: int = 1 # Random seed for reproducibility
+    days_buffer: int = 1 # Buffer days before and after start and end date to avoid edge effects
+    first_loc: int = 1 # 
 
     def __post_init__(self):
         # Validate number of vehicles: positive integer
@@ -41,21 +40,22 @@ class UserParamsMobModel:
         if self.start_date.date() >= self.end_date.date():
             message = "Start date must be at least one day before end date."
             logging.error(message)
-            raise ValueError(message)
-        
+            raise ValueError(message)       
 
 class MobModel:
     """
-    Class for the model that creates mobility profiles (MobProfiles).
+    Class for the model that creates mobility profiles (MobData).
     Args:
-        params: ModelParams dataclass containing mobility model parameters.
+        model_params: ModelParams dataclass containing mobility model parameters.
     """
     def __init__(self, model_params: ModelParams):
         self.model_params = model_params
 
-
     def generate_mob_profiles(self, user_params: UserParamsMobModel) -> MobData:
-        
+
+        logger.info("Start generating mobility profiles for %d vehicles from %s to %s",
+                    user_params.number_vehicles, user_params.start_date, user_params.end_date)
+
         # Set random seed
         np.random.seed(user_params.random_seed)
 
@@ -63,12 +63,8 @@ class MobModel:
         self._predefine_vars(user_params=user_params)
         previous_start = np.zeros((self._number_vehicles,), dtype=int)
 
-        # Define a possible location for the first step based on the transition matrix
-        possible_start_locations = [1]# TODO : determine based on transition matrix
-        self._location_array[0, :] = np.random.choice(possible_start_locations, size=self._number_vehicles, replace=True)
-    
         # Add rich progress bar for vehicle loop
-        for t in track(range(1, self._number_steps), description="Generating mobility profiles..."):
+        for t in track(range(1, self._number_steps), description="Generating mobility profiles:"):
             # Determine new location based on transition matrix
             self._generate_location(t)
             for v in range(self._number_vehicles):
@@ -107,18 +103,19 @@ class MobModel:
 
         self._number_vehicles = user_params.number_vehicles
 
-        # Determine datetime array
-        temp_res = self.model_params.info.temp_res
-        start_dt = user_params.start_date.normalize()
-        end_dt = user_params.end_date.normalize() + pd.Timedelta(days=1) - pd.Timedelta(hours=temp_res)
-        frequency = f"{self.model_params.info.temp_res}H"
-        self._dt_array = pd.date_range(start=start_dt, end=end_dt, freq=frequency)
+        # Datetime array mit Buffer über Utility-Funktion
+        (self._dt_array, self._mask_buffer) = get_datetime_array(
+                                                        start_date = user_params.start_date,
+                                                        end_date = user_params.end_date,
+                                                        temp_res = self.model_params.info.temp_res,
+                                                        number_days_buffer = user_params.days_buffer
+                                                    )
         self._number_steps = len(self._dt_array)
 
         self._index_day_array = get_day_index(self._dt_array, self.model_params.info.temp_res)
         weekday_array = self._dt_array.weekday
-        mask_cluster0 = self.model_params.df["cluster"] == 0
-        typedays = [[int(i) for i in list(x)] for x in self.model_params.df.loc[mask_cluster0, "weekdays"]]
+        mask_cluster1 = self.model_params.df["id_cluster"] == 1
+        typedays = [[int(i) for i in list(x)] for x in self.model_params.df.loc[mask_cluster1, "weekdays"]]
         typedays_array = TypeDays(typedays).weekday2typeday(weekday_array)
         first_weekday = self.model_params.df["weekdays"].apply(lambda x: x[0])
         self.model_params.df["typeday"] = TypeDays(typedays).weekday2typeday(first_weekday)
@@ -135,7 +132,7 @@ class MobModel:
         # Determine index of parameters based on cluster_array and typedays_array
         self._index_params_array = (
             self.model_params.df.reset_index()
-            .pivot(index="typeday", columns="cluster", values="index")
+            .pivot(index="typeday", columns="id_cluster", values="index")
             .loc[typedays_array, cluster_array]
             .to_numpy()
         )
@@ -147,6 +144,9 @@ class MobModel:
         self._duration_array = np.zeros((self._number_steps, self._number_vehicles), dtype=float) # duration of journeys (sparse)
         self._start_journey_array = np.zeros((self._number_steps, self._number_vehicles), dtype=bool) # start of journeys
 
+        # Set first location for all vehicles
+        self._location_array [0, :] = user_params.first_loc
+
     def _split_vehicles_per_cluster(self, number_vehicles: int) -> np.ndarray:
         """
         Split the total number of vehicles into clusters based on the model parameters.
@@ -156,7 +156,7 @@ class MobModel:
         Returns:
             dict[int, int]: Dictionary with cluster ID as key and number of vehicles as value.
         """
-        percentages_per_cluster = self.model_params.df.groupby("cluster")["percentage"].first()
+        percentages_per_cluster = self.model_params.df.groupby("id_cluster")["percentage"].first()
         vehicles_per_cluster = (percentages_per_cluster / 100 * number_vehicles).round().astype(int)
         rest = number_vehicles - vehicles_per_cluster.sum()
         if rest > 0:
@@ -232,34 +232,6 @@ class MobModel:
         # Set speed and distance values back to full arrays
         self._speed_array[mask_start] = speed_jarray
         self._distance_array[mask_start] = distance_jarray
-    
-    def _generate_speed(self, t, v, index_start, duration) -> None:
-        """
-        Generate a speed value from the specified distribution parameters.
-        Args:
-            t: Time step index.
-            v: Vehicle index.
-            index_start: Index of the start of the journey.
-            duration: Duration of the journey in hours.
-        """
-        # Identify the index of the speed params based  on the duration
-        index_params = self._index_params_array[t, v]
-        edges_duration = self.model_params.df.loc[index_params, "speed_dist_edges_duration"]
-        max_index_duration = len(edges_duration)-2
-        index_duration = np.searchsorted(edges_duration, duration, side="right") - 1
-        index_duration = min(index_duration, max_index_duration)
-
-        # Get speed distribution parameters from params from params dataframe
-        speed_param1 = self.model_params.df.loc[index_params, "speed_dist_param1"][index_duration]
-        speed_param2 = self.model_params.df.loc[index_params, "speed_dist_param2"][index_duration]
-        speed_max = self.model_params.df.loc[index_params, "speed_max"]
-
-        # Generate random number to determine speed
-        rand2 = np.random.rand()
-        speed = beta.ppf(rand2, speed_param1, speed_param2) * speed_max
-
-        # Set speed for the journey
-        self._speed_array[index_start, v] = speed
 
     def _convert_arrays2mob_profiles(self) -> MobData:
         """
@@ -267,6 +239,17 @@ class MobModel:
         Returns:
             pd.DataFrame: DataFrame containing the logbook data.
         """
+        # remove buffer from all arrays
+        self._dt_array = self._dt_array[~self._mask_buffer]
+        self._start_journey_array = self._start_journey_array[~self._mask_buffer, :]
+        self._duration_array = self._duration_array[~self._mask_buffer, :]
+        self._distance_array = self._distance_array[~self._mask_buffer, :]
+        self._location_array = self._location_array[~self._mask_buffer, :]
+        self._speed_array = self._speed_array[~self._mask_buffer, :]
+
+        # convert location idx into location IDs 
+        self._location_array = self.model_params.info.locations[self._location_array]
+        
         # get rows and cols of journeys
         rows, cols = np.nonzero(self._start_journey_array)
         sort_idx = np.lexsort((rows, cols)) # sort by vehicle and time 
@@ -274,7 +257,7 @@ class MobModel:
         cols_sorted = cols[sort_idx]
 
         # Predefine empty logbook DataFrame
-        logbook_df = LogbookSchema.example(size=0)
+        logbook_df = pd.DataFrame()
         logbook_df["id_vehicle"] = cols_sorted + 1 # vehicle IDs start at 1
         logbook_df["dep_dt"] = self._dt_array[rows_sorted]
         logbook_df["arr_dt"] = self._dt_array[rows_sorted] + pd.to_timedelta(self._duration_array[rows_sorted, cols_sorted], unit="h")
@@ -283,23 +266,31 @@ class MobModel:
         logbook_df["arr_loc"] = self._location_array[step_end_journey, cols_sorted]
         logbook_df["distance"] = self._distance_array[rows_sorted, cols_sorted]
 
-        # remove id_journey column (will be reindexed later)
-        logbook_df = logbook_df.drop(columns=["id_journey"])
-
         # Create vehicle DataFrame
         first_day = self._dt_array[0].floor('D')
         last_day = self._dt_array[-1].floor('D')
+        id_cluster = self.model_params.df.id_cluster[self._index_params_array[1,:]]
         vehicle_df = pd.DataFrame({
 			"id_vehicle": range(1, self._number_vehicles + 1),
 			"first_day": [first_day] * self._number_vehicles,
 			"last_day":  [last_day] * self._number_vehicles,
-			"cluster":   [1] * self._number_vehicles,
+			"id_cluster":   id_cluster.tolist(),
             "first_loc": self._location_array[0, :],
 		})
 
         mob_profiles = MobData(
-            input_logbook_df=logbook_df,
-            input_vehicle_df=vehicle_df
+            input_logbooks_df=logbook_df,
+            input_vehicles_df=vehicle_df
         )
+
+        # Update location labels
+        locations_df = mob_profiles.locations.df
+        locations_df["label"] = self.model_params.info.labels_locations
+        mob_profiles.locations.update_locations(locations_df)
+
+        # Update cluster labels   
+        clusters_df = mob_profiles.clusters.df
+        clusters_df["label"] = self.model_params.info.labels_clusters
+        mob_profiles.clusters.update_clusters(clusters_df)
 
         return mob_profiles

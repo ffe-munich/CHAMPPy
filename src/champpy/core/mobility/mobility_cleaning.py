@@ -1,7 +1,7 @@
 import pandas as pd
 from dataclasses import dataclass
 from typing import Literal, Tuple
-from champpy.core.mobility_data import MobData
+from champpy.core.mobility.mobility_data import MobData
 import logging
 
 # Configure logger for this module
@@ -31,6 +31,7 @@ class UserParamsCleaning:
 		Distance limits configuration in kilometers.
 	temp_res : float
 		Temporal resolution in hours for resampling during cleaning.
+	print_summary : bool
 	"""
 	speed: LimitConfig = LimitConfig(min_value=0.01, min_method="delete", max_value=120.0, max_method="cap")
 	duration: LimitConfig = LimitConfig(min_value=0.25, min_method="delete", max_value=8.0, max_method="cap")
@@ -83,11 +84,14 @@ class MobDataCleaner:
 			Cleaned MobData instance.
 		"""
 	    # do nothung if input is empty
-		if mob_data.logbook.df is None or mob_data.logbook.df.empty:
+		if mob_data.logbooks.df is None or mob_data.logbooks.df.empty:
 			return mob_data
 		
 		# Resample to temporal resolution
-		mob_data.logbook.res_min = self.params.temp_res
+		mob_data.logbooks.temp_res = self.params.temp_res
+
+		# Reindex id_journey, id_vehicle, id_cluster
+		mob_data.reindexing("all")
 
 		# Ensure first/last journeys start/end at plausible locations
 		self._clean_first_last_locations(mob_data)
@@ -97,8 +101,8 @@ class MobDataCleaner:
 		self._clean_column(mob_data, "speed")
 		self._clean_column(mob_data, "distance")
 
-		# Reset cluster ids in vehicle data starting from 0
-		self._reindex_clusters(mob_data)
+		# Reindex id_journey, id_vehicle, id_cluster
+		mob_data.reindexing("all")
 
 		# Print summary of cleaning
 		self._log_summary()
@@ -128,7 +132,7 @@ class MobDataCleaner:
 			Cleaned MobData instance.
 		"""
 
-		lb_df = mob_data.logbook.df
+		lb_df = mob_data.logbooks.df
 		limit_config = getattr(self.params, column)
 
 		# Identify rows above and below limits
@@ -139,7 +143,7 @@ class MobDataCleaner:
 		# Handle values below min_value
 		if mask_below.any():
 				id_journeys_to_delete = lb_df.loc[mask_below, "id_journey"].tolist()
-				mob_data.logbook.delete_journeys(id_journeys_to_delete)
+				mob_data.logbooks.delete_journeys(id_journeys_to_delete)
 				self.deleted_id_journeys[column].extend(id_journeys_to_delete)
 
 		# Handle values above max_value
@@ -155,12 +159,12 @@ class MobDataCleaner:
 				else:
 					update_df[update_column] = limit_config.max_value
 				
-				mob_data.logbook.update_journeys(update_df)
+				mob_data.logbooks.update_journeys(update_df)
 				self.modified_id_journeys[column].extend(lb_df.loc[mask_above, "id_journey"].tolist())
 			
 			elif limit_config.max_method == "delete":
 				id_journeys_to_delete = lb_df.loc[mask_above, "id_journey"].tolist()
-				mob_data.logbook.delete_journeys(id_journeys_to_delete)
+				mob_data.logbooks.delete_journeys(id_journeys_to_delete)
 				self.deleted_id_journeys[column].extend(id_journeys_to_delete)
 
 		return mob_data
@@ -172,7 +176,7 @@ class MobDataCleaner:
 		start at that location and how many last trips of the day end at that location.
 
 		Args:
-			mob_data (MobData): MobData instance with logbook data.
+			mob_data (MobData): MobData instance with logbooks data.
 
 		Returns:
         Tuple[pd.DataFrame, list, list]: A tuple containing:
@@ -180,7 +184,7 @@ class MobDataCleaner:
 			- A list of id_journeys that are first trips of the day.
 			- A list of id_journeys that are last trips of the day.
 		"""
-		lb_df = mob_data.logbook.df
+		lb_df = mob_data.logbooks.df
 		if lb_df is None or lb_df.empty:
 			return pd.DataFrame(), [], []
 
@@ -218,10 +222,10 @@ class MobDataCleaner:
 		Replace implausible first/last locations with the most frequent location for that weekday.
 
 		Args:
-			mob_data (MobData): MobData instance with logbook data.
+			mob_data (MobData): MobData instance with logbooks data.
 		"""
-		# Abort if logbook is empty
-		lb_df = mob_data.logbook.df
+		# Abort if logbooks is empty
+		lb_df = mob_data.logbooks.df
 		if lb_df is None or lb_df.empty:
 			return
 		
@@ -229,8 +233,8 @@ class MobDataCleaner:
 		merged_counts, id_journeys_first, id_journeys_last = self._get_first_last_locations_of_day(mob_data)
 
 		# Get dataframes for first and last of day journeys
-		lb_df_only_last = mob_data.logbook.df.loc[mob_data.logbook.df["id_journey"].isin(id_journeys_last)]
-		lb_df_only_first = mob_data.logbook.df.loc[mob_data.logbook.df["id_journey"].isin(id_journeys_first)]
+		lb_df_only_last = mob_data.logbooks.df.loc[mob_data.logbooks.df["id_journey"].isin(id_journeys_last)]
+		lb_df_only_first = mob_data.logbooks.df.loc[mob_data.logbooks.df["id_journey"].isin(id_journeys_first)]
 
 		# add weekday column to lb_df_only_last and lb_df_only_first
 		lb_df_only_last["weekday"] = lb_df_only_last["arr_dt"].dt.dayofweek
@@ -254,9 +258,9 @@ class MobDataCleaner:
 				left_on="weekday", 
 				right_on="weekday", 
 				how="left")
-			mob_data.logbook.update_journeys(first_of_day_to_update)
+			mob_data.logbooks.update_journeys(first_of_day_to_update)
 			# Restore location continuity after updates
-			mob_data.logbook.restore_location_continuity(target="dep")
+			mob_data.logbooks.restore_location_continuity(target="dep")
 			# Update first_loc in vehicle dataframe - only for affected vehicles
 			new_first_locs = first_of_day_to_update[["id_vehicle", "dep_loc"]].drop_duplicates().rename(columns={"dep_loc": "first_loc"})
 			# Get full vehicle data for affected vehicles and update first_loc
@@ -278,21 +282,21 @@ class MobDataCleaner:
 				left_on="weekday", 
 				right_on="weekday", 
 				how="left")
-			mob_data.logbook.update_journeys(last_of_day_to_update)
+			mob_data.logbooks.update_journeys(last_of_day_to_update)
 			# Restore location continuity after updates
-			mob_data.logbook.restore_location_continuity(target="arr") 
+			mob_data.logbooks.restore_location_continuity(target="arr") 
 			# log modified id_journeys
 			self.modified_id_journeys["location"].extend(last_of_day_to_update.index.tolist())
 
 		return mob_data
 	
 	def _clean_transition_between_days(self, mob_data: MobData) -> MobData:
-		""" Clean the logbook to achieve a consistent transition of first/last journey locations per weekday.
+		""" Clean the logbooks to achieve a consistent transition of first/last journey locations per weekday.
 		The number of last journeys of a weekday arriving at a location must 
 		match the number of first journeys of the next weekday departing from that location.
 
 		Args:
-			mob_data (MobData): MobData instance with logbook data.
+			mob_data (MobData): MobData instance with logbooks data.
 		"""
 
 		# get first/last locations of day and corresponding id_journeys
@@ -304,14 +308,6 @@ class MobDataCleaner:
 		# TODO: Implement alignment logic here
 		
 		return mob_data
-	
-	def _reindex_clusters(self, mob_data: MobData) -> MobData:
-		"""
-		Reindex cluster IDs of vehiclesto be consecutive starting from 0.
-		"""	
-		unique_clusters = sorted(mob_data.vehicles.df["cluster"].unique())
-		cluster_mapping = {old_id: new_id for new_id, old_id in enumerate(unique_clusters)}
-		mob_data.vehicles._df["cluster"] = mob_data.vehicles._df["cluster"].map(cluster_mapping)
 
 	def _log_summary(self) -> None:
 		"""Print a summary of cleaning actions taken."""

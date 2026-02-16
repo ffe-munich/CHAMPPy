@@ -1,9 +1,11 @@
+import base64
 import pandas as pd
 import numpy as np
 import webbrowser
-import os
 import logging
 
+from pathlib import Path
+from importlib.resources import files
 from plotly import graph_objs as go, express as px, subplots
 from typing import Literal, Optional
 from pydantic import ConfigDict, validate_call
@@ -12,6 +14,7 @@ from rich.progress import Progress
 from dataclasses import field
 from champpy.core.mobility.mobility_data import MobData, MobDataExtended
 from champpy.utils.time_utils import TypeDays, get_week_index
+from champpy.utils.data_utils import get_plot_path
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +36,7 @@ class UserParamsMobPlotter:
         ])
     location_temp_res: Optional[int] = 1 # Temporal resolution in hours, only relevant for location profile plots
     location_order: Optional[list] = field(default_factory=lambda:[])
+    clustering: Optional[bool] = False
 
 class MobPlotter:
     """ Class for plotting mobility characteristics. """
@@ -46,6 +50,7 @@ class MobPlotter:
         self._temp_res = user_params.location_temp_res
         self._location_order = user_params.location_order
         self._save_plot = user_params.save_plot
+        self._clustering = user_params.clustering
 
         # Placeholder for temporary variables
         self._location_order = []
@@ -59,47 +64,63 @@ class MobPlotter:
         Generate a combined HTML file with plots from plot_mob_char, plot_hist, and plot_location_profile_week.
 
         Parameters:
-        t_location (pd.DataFrame): Input data for the plots.
-        output_file (str): Path to the output HTML file. Default is "combined_plots.html".
-        font_size (int): Font size for the plots. Default is 18.
+        mob_data (MobData | MobDataExtended): Input data for the plots.
         """
+        logger.info("Generate plot of mobility profiles")
 
         # Parse mob_data to ensure it is MobDataExtended
-        mob_data_ext = parse_mob_data(mob_data, splitdays=True)
+        mob_data_ext = parse_mob_data(mob_data, splitdays=True, clustering=self._clustering)
 
         # Disable individual plot showing
         cache_show = self._show
         self._show = False 
         
         # Generate individual plots
-        with Progress() as progress:
-            task = progress.add_task("Generating plots...", total=3)
-            fig_mob_char = self.plot_mob_char(mob_data_ext)
-            progress.update(task, advance=1)
-            fig_hist = self.plot_hist(mob_data_ext)
-            progress.update(task, advance=1)
-            fig_location_profile = self.plot_location_profile_week(mob_data_ext)
-            progress.update(task, advance=1)
+        fig_mob_char = self.plot_mob_char(mob_data_ext)
+        fig_hist = self.plot_hist(mob_data_ext)
+        fig_location_profile = self.plot_location_profile_week(mob_data_ext)
 
         # Ensure the output_file path is absolute and properly formatted
         # Ensure the output_file has .html extension, replacing any existing extension
-        base, ext = os.path.splitext(self._filename)
-        if ext != "html" and self._save_plot:
+        output_path = Path(self._filename)
+        if output_path.suffix != ".html" and self._save_plot:
             logger.warning(f"Can only export as html. Fileformat of output file '{self._filename}'is changed to .html extension.")
-        output_file = base + '.html'
-        output_file = os.path.abspath(output_file)
+        output_path = output_path.with_suffix('.html')
 
+        # Debug output
+        logger.debug(f"Output filename: {self._filename}")
+        logger.debug(f"Output path (before): {output_path}, is_absolute: {output_path.is_absolute()}")
+        
+        # If path is relative, resolve based on configuration
+        if not output_path.is_absolute():
+            output_path = get_plot_path(output_path)
+        logger.debug(f"Output path (after get_plot_path): {output_path}")
+        output_file = str(output_path.resolve())
+        logger.debug(f"Output file (final): {output_file}")
 
         # Combine all figures into a single HTML file if save_plot is True
         if self._save_plot:
+            # Create directory if it doesn't exist
+            Path(output_file).parent.mkdir(parents=True, exist_ok=True)
+            
+            # Load logo from package resources and encode as base64
+            logo_path = files('champpy').joinpath('data/ffe_logo.svg')
+            logo_svg = logo_path.read_text(encoding='utf-8')
+            logo_base64 = base64.b64encode(logo_svg.encode('utf-8')).decode('utf-8')
+            logo_data_uri = f"data:image/svg+xml;base64,{logo_base64}"
+
             with open(output_file, "w", encoding="utf-8") as f:
-                f.write(f"<html><head><title>Combined Plots</title><style>body {{ font-family: {self._font_family}; }}</style></head><body>\n")
-                f.write("<h1>Combined Plots</h1>\n")
-                f.write("<h2>📊 Mobility Characteristics</h2>")
+                f.write(f"<html><head><title>CHAMPPy Mobility plots</title>")
+                f.write(f"<style>body {{ font-family: {self._font_family}; margin: 0; padding: 20px; }} ")
+                f.write(".header { display: flex; align-items: center; gap: 1050px; } ")
+                f.write(".logo { height: 50px; width: auto; }</style></head><body>\n")
+                f.write('<div class="header"><h1>CHAMPPy mobility plots</h1>')
+                f.write(f'<img src="{logo_data_uri}" class="logo" alt="FfE Logo"></div>\n')
+                f.write("<h2>📊 Mobility characteristics</h2>")
                 f.write(fig_mob_char.to_html(full_html=False, include_plotlyjs='cdn'))
-                f.write("<h2>📈 Histogram of Mobility Characteristics</h2>\n")
+                f.write("<h2>📈 Histogram of mobility characteristics</h2>\n")
                 f.write(fig_hist.to_html(full_html=False, include_plotlyjs=False))
-                f.write("<h2>📍 Location Profile Over the Week</h2>\n")
+                f.write("<h2>📍 Location profile over the week</h2>\n")
                 f.write(fig_location_profile.to_html(full_html=False, include_plotlyjs=False))
                 f.write("</body></html>")
 
@@ -110,7 +131,7 @@ class MobPlotter:
         if self._show:
             webbrowser.open(f"file://{output_file}")
 
-    def plot_mob_char(self, mob_data: MobData | MobDataExtended):
+    def plot_mob_char(self, mob_data: MobData | MobDataExtended) -> go.Figure:
         """
         Plot the mobility characteristics: daily kilometrage, daily triptime, and number of trips per day.
 
@@ -120,8 +141,9 @@ class MobPlotter:
         Returns:
         fig: Plotly figure object.
         """
+        logger.info("Create plot of mobility characteristics")
         # Parse mob_data to ensure it is MobDataExtended
-        mob_data_ext = parse_mob_data(mob_data, splitdays=True)
+        mob_data_ext = parse_mob_data(mob_data, splitdays=True, clustering=self._clustering)
         self._store_locations_clusters(mob_data_ext)
 
         # Calculate mobility characteristics for the current cluster
@@ -129,14 +151,14 @@ class MobPlotter:
                         mob_data_ext,
                         method='mean',
                         typedays=TypeDays(groups=[[0,1,2,3,4],[5,6]]),
-                        clustering=True,
+                        clustering=self._clustering,
                         calc_share_at_locations=False
                         ).df
         mob_char_df_week = MobilityCharacteristics(
                         mob_data_ext,
                         method='mean',
                         typedays=TypeDays(groups=[[0, 1, 2, 3, 4, 5, 6]]),
-                        clustering=True,
+                        clustering=self._clustering,
                         calc_share_at_locations=False
                         ).df
         
@@ -144,8 +166,9 @@ class MobPlotter:
         mob_char_df = pd.concat([mob_char_df_week_weekdend, mob_char_df_week], ignore_index=True)
 
         # Define typedays and metrics for plotting
-        typedays = ["Weekdays", "Weekend", "Total"]
+        typedays = ["Mon-Fri", "Sat-Sun", "Mon-Sun"]
         metrics = ['daily_kilometrage', 'daily_journey_time', 'number_journeys_per_day']
+        name_metric = ['Daily kilometrage in km', 'Daily journey time in h', 'Number of journeys per day']
 
         # Create subplot
         fig = subplots.make_subplots(rows=1, cols=3, horizontal_spacing=0.15)
@@ -153,13 +176,13 @@ class MobPlotter:
         # Plot for each cluster
         for idx_cluster, cluster in enumerate(mob_data_ext.clusters):
             # Filter data for the current cluster and type of days
-            cluster_data = mob_char_df[mob_char_df['id_cluster'] == cluster] if cluster is not None else mob_char_df
+            cluster_data = mob_char_df[mob_char_df['id_cluster'] == cluster] if self._clustering else mob_char_df
             # select color for the cluster
-            cluster_color = f"rgb({self._rgb_color[cluster][0] * 255},{self._rgb_color[cluster][1] * 255},{self._rgb_color[cluster][2] * 255})"
+            cluster_color = f"rgb({self._rgb_color[idx_cluster][0] * 255},{self._rgb_color[idx_cluster][1] * 255},{self._rgb_color[idx_cluster][2] * 255})"
 
             for idx_metrix, metric in enumerate(metrics):
                 values = cluster_data[metric].tolist()
-                show_legend = True if idx_metrix == 0 else False  # Show legend only for the first metric
+                show_legend = True if idx_metrix == 0 and len(self._clusters) > 1 else False  # Show legend only for the first metric
                 fig.add_trace(
                 go.Bar(
                     y=typedays,
@@ -213,8 +236,9 @@ class MobPlotter:
                 linecolor="black",
                 linewidth=1,
                 layer="above traces",
-                title_font=dict(size=self._font_size), 
-                tickfont=dict(size=self._font_size),
+                title_text=name_metric[i-1],
+                title_font=dict(size=self._font_size, family=self._font_family), 
+                tickfont=dict(size=self._font_size, family=self._font_family),
                 row=1, col=i
             )
             fig.update_yaxes(
@@ -224,7 +248,7 @@ class MobPlotter:
                 linewidth=1,
                 title_text="Type of days",
                 layer="above traces",
-                title_font=dict(size=self._font_size), 
+                title_font=dict(size=self._font_size, family=self._font_family), 
                 tickfont=dict(size=self._font_size),
                 row=1, col=i
             )
@@ -245,54 +269,37 @@ class MobPlotter:
         Returns:
         fig: Plotly figure object.
         """
-        mob_data_ext = parse_mob_data(mob_data, splitdays=False)
+        logger.info("Create plot of mobility histograms")
+        mob_data_ext = parse_mob_data(mob_data, splitdays=False, clustering=self._clustering)
         self._store_locations_clusters(mob_data_ext)
 
-        # legt clusters and legend of clusters
-        clusters = self._clusters
+        # Get data per day
+        t_mob_char_day = MobilityCharacteristics(mob_data_ext, 
+                                            typedays=TypeDays(groups=[[0,1,2,3,4,5,6]]),
+                                            grouping='day',
+                                            clustering=self._clustering,
+                                            calc_share_at_locations=False).df
+        daily_mileage_per_day = t_mob_char_day['daily_kilometrage']
+        triptime_per_day = t_mob_char_day['daily_journey_time']
+        n_trips_per_day = t_mob_char_day['number_journeys_per_day']
 
-        # Initialize data containers
-        # Initialize lists with the correct size based on the number of clusters
-        daily_mileage_per_day = [None] * len(clusters)
-        triptime_per_day = [None] * len(clusters)
-        n_trips_per_day = [None] * len(clusters)
+        # Get data per vehicle
+        t_mob_char_vehicle = MobilityCharacteristics(mob_data_ext, 
+                                            typedays=TypeDays(groups=[[0,1,2,3,4,5,6]]),
+                                            grouping='vehicle',
+                                            clustering=self._clustering,
+                                            calc_share_at_locations=False).df
+        daily_mileage_per_vehicle = t_mob_char_vehicle['daily_kilometrage']
+        triptime_per_vehicle = t_mob_char_vehicle['daily_journey_time']
+        n_trips_per_vehicle = t_mob_char_vehicle['number_journeys_per_day']
 
-        daily_mileage_per_vehicle = [None] * len(clusters)
-        triptime_per_vehicle = [None] * len(clusters)
-        n_trips_per_vehicle = [None] * len(clusters)
-
-        mileage_per_trip = [None] * len(clusters)
-        duration_per_trip = [None] * len(clusters)
-        speed_per_trip = [None] * len(clusters)
-
-        # Process data for each cluster
-        for idx, cluster in enumerate(clusters):
-            # Filter data for the current cluster
-            cluster_data = mob_data_ext.extract_cluster(id_cluster=cluster, copy=False)
-
-            # Per day
-            t_mob_char_day = MobilityCharacteristics(cluster_data, 
-                                                typedays=TypeDays(groups=[[0,1,2,3,4,5,6]]),
-                                                grouping='day', 
-                                                calc_share_at_locations=False).df
-            daily_mileage_per_day[idx] = t_mob_char_day.at[0,'daily_kilometrage']
-            triptime_per_day[idx] = t_mob_char_day.at[0, 'daily_journey_time']
-            n_trips_per_day[idx] = t_mob_char_day.at[0, 'number_journeys_per_day']
-
-            # Per vehicle
-            t_mob_char_vehicle = MobilityCharacteristics(cluster_data, 
-                                                typedays=TypeDays(groups=[[0,1,2,3,4,5,6]]),
-                                                grouping='vehicle', 
-                                                calc_share_at_locations=False).df
-            daily_mileage_per_vehicle[idx] = t_mob_char_vehicle.at[0,'daily_kilometrage']
-            triptime_per_vehicle[idx] = t_mob_char_vehicle.at[0,'daily_journey_time']
-            n_trips_per_vehicle[idx] = t_mob_char_vehicle.at[0,'number_journeys_per_day']
-
-            # Per trip
-            mask_trips = cluster_data.df['location'] == 0
-            mileage_per_trip[idx] = cluster_data.df.loc[mask_trips,'distance'].tolist()
-            duration_per_trip[idx] = (cluster_data.df.loc[mask_trips,'duration']).tolist()
-            speed_per_trip[idx] = cluster_data.df.loc[mask_trips,'speed'].tolist()
+        # Get data per journey
+        mask_trips = mob_data_ext.df['location'] == 0
+        trips_df = mob_data_ext.df.loc[mask_trips]
+        grouped = trips_df.groupby('id_cluster')
+        mileage_per_trip= pd.Series([g['distance'].tolist() for _, g in grouped])
+        duration_per_trip = pd.Series([g['duration'].tolist() for _, g in grouped])
+        speed_per_trip = pd.Series([g['speed'].tolist() for _, g in grouped])
         
         # Create the plot 
         fig = subplots.make_subplots(
@@ -335,7 +342,7 @@ class MobPlotter:
             plot_bgcolor='white',
             paper_bgcolor='white',
             font=dict(size=self._font_size, family=self._font_family),
-            showlegend=True,
+            showlegend=True if len(self._clusters) > 1 else False,
             legend=dict(
                 font=dict(
                 size=self._font_size, 
@@ -352,7 +359,7 @@ class MobPlotter:
 
     def _plot_sub_hist(self, 
                        fig: go.Figure, 
-                       data: list[np.ndarray],
+                       data: pd.Series | list,
                        row: int, 
                        col: int, 
                        string_xlabel: Optional[str]=None, 
@@ -444,9 +451,10 @@ class MobPlotter:
         fig: Matplotlib figure object.
         share_loc: Matrix containing the share at locations for each timestep of the week.
         """
+        logger.info("Create plot of location profile over the week")
         # Parse mob_data to ensure it is MobDataExtended
-        mob_data_ext = parse_mob_data(mob_data, splitdays=True)
-        mob_data_ext_df = mob_data_ext.df
+        mob_data_ext = parse_mob_data(mob_data, splitdays=True, clustering=self._clustering)
+        mob_data_ext_df = mob_data_ext.df        
 
         # Check clusters and legend of clusters
         self._store_locations_clusters(mob_data_ext)
@@ -523,15 +531,17 @@ class MobPlotter:
             df_share_loc, 
             x=df_share_loc.index, 
             y=df_share_loc.columns,
-            color_discrete_sequence=[f"rgb({r*255},{g*255},{b*255})" for r, g, b in self._rgb_color]
+            color_discrete_sequence=[f"rgba({r*255},{g*255},{b*255},1.0)" for r, g, b in self._rgb_color]
         )
 
-        # Remove lines from the area chart
-        fig.update_traces(
-            line=dict(width=0),
-            opacity=1.0)   
+        # Set explicit colors with full opacity to each trace
+        for idx, (trace, color) in enumerate(zip(fig.data, self._rgb_color)):
+            rgba_color = f"rgba({int(color[0]*255)},{int(color[1]*255)},{int(color[2]*255)},1.0)"
+            trace.fillcolor = rgba_color
+            trace.line.color = rgba_color
+            trace.opacity = 1.0
         
-                # Formatting the plot
+        # Formatting the plot
         fig.update_layout(
             xaxis=dict(
                 visible=True, 
@@ -582,7 +592,7 @@ class MobPlotter:
                     family=self._font_family
                 )
             ),
-            width=1200,  # width of the plot in Pixel
+            width=1300,  # width of the plot in Pixel
             height=400,   # high of the plot in Pixel
             plot_bgcolor='white',  # background of the plot area
             paper_bgcolor='white',  # background of the entire figure
@@ -684,7 +694,7 @@ class MobPlotter:
             )
 
         fig.update_layout(
-            width=1200,  # width of the plot in Pixel
+            width=1300,  # width of the plot in Pixel
             height=250*len(self._location_order),   # high of the plot in Pixel
             plot_bgcolor='white',  # background of the plot area
             paper_bgcolor='white',  # background of the entire figure
@@ -704,8 +714,8 @@ class MobPlotter:
         self._unique_locations = mob_data_ext.locations
         self._legend_locations = mob_data_ext.labels_locations
     
-        # Plot the colors from _rgb_color
     def show_rgb_colors(self):
+        """Show the RGB colors used in the plots as a bar chart."""
         df = pd.DataFrame({
             "Color": [f"Color {i+1}" for i in range(len(self._rgb_color))],
             "Value": [1] * len(self._rgb_color),
@@ -912,7 +922,9 @@ class MobilityCharacteristics():
         return share_at_locations.to_numpy(), locations.to_numpy()
 
 @validate_call(config=ConfigDict(arbitrary_types_allowed=True))   
-def parse_mob_data(mob_data: MobData | MobDataExtended, splitdays: bool = False) -> MobDataExtended:
+def parse_mob_data(mob_data: MobData | MobDataExtended, 
+                   splitdays: Optional[bool] = False,
+                   clustering: Optional[bool] = False) -> MobDataExtended:
     """
     Utility function to ensure the input mobility data is of type MobDataExtended.
 
@@ -920,6 +932,7 @@ def parse_mob_data(mob_data: MobData | MobDataExtended, splitdays: bool = False)
     mob_data (MobData | MobDataExtended): Input mobility data.
     splitdays (Optional[bool]): Whether to split trips that span multiple days when converting MobData to MobDataExtended. 
                         Default is False.
+    clustering (Optional[bool]): Whether to include cluster information in the output. Default is False.
 
     Returns:
     MobDataExtended: Parsed mobility data.
@@ -927,6 +940,6 @@ def parse_mob_data(mob_data: MobData | MobDataExtended, splitdays: bool = False)
     if isinstance(mob_data, MobDataExtended):
         return mob_data
     elif isinstance(mob_data, MobData):
-        return MobDataExtended(mob_data, splitdays=splitdays)
+        return MobDataExtended(mob_data, splitdays=splitdays, clustering=clustering)
     else:
         raise TypeError("mob_data must be an instance of MobData or MobDataExtended.")

@@ -2,48 +2,114 @@ import pandas as pd
 import pandera.pandas as pa
 from pandera.typing import Series
 import logging
-from typing import Literal
+from typing import Literal, Optional
 from pydantic import validate_call
+from abc import ABC
 from champpy.utils.data_utils import Event
-
-# Basisklasse für Mobility-Komponenten
-import pandas as pd
-
-class BaseMobilityComponent:
-	_schema = None  # In Subklassen überschreiben
-
-	def __init__(self, input_df: pd.DataFrame = None, frozen: bool = False):
-		self._df = None
-		self._frozen = frozen
-		if input_df is not None:
-			self.df = input_df
-
-	@property
-	def df(self) -> pd.DataFrame:
-		if self._df is None:
-			return pd.DataFrame()
-		return self._df.copy()
-
-	@df.setter
-	def df(self, value: pd.DataFrame):
-		self._check_frozen()
-		if self._schema is not None:
-			self._df = self._schema.validate(value)
-		else:
-			self._df = value
-
-	@property
-	def is_empty(self) -> bool:
-		return self._df is None or self._df.empty
-
-	def _check_frozen(self):
-		if self._frozen:
-			raise AttributeError("This instance is frozen and cannot be modified.")
 
 # Configure logger for this module
 logger = logging.getLogger(__name__)
 
+class BaseMobilityComponent(ABC):
+	"""Base class for mobility components: Logbooks, Vehicles, Clusters, Locations."""
+	_schema = None  # Overridden in subclasses with specific Pandera schema
 
+	def __init__(self, input_df: pd.DataFrame | None = None, frozen: bool = False):
+		"""Initialize a BaseMobilityComponent instance."""
+		self._frozen = frozen
+		if input_df is not None:
+			self.df = input_df
+		else:
+			self._df = None
+	
+	def __init_subclass__(cls):
+		"""Ensure subclasses define a _schema attribute."""
+		super().__init_subclass__()
+		if getattr(cls, "_schema", None) is None:
+			raise NotImplementedError(f"{cls.__name__} must define a class attribute '_schema'")
+
+	@property
+	def df(self) -> pd.DataFrame:
+		"""Get the DataFrame of the mobility component."""
+		if self._df is None:
+			output_df = self._schema.example(size=0)
+		else:
+			output_df = self._df.copy()
+		output_df = self._on_df_getter(output_df)  # Hook method for subclasses
+		return output_df
+	
+	@df.setter
+	def df(self, input_df: pd.DataFrame):
+		"""Set the DataFrame of the mobility component with validation."""
+		self._check_frozen()
+		self._df = self._prep_input_df(input_df)
+		self._on_df_setter() # Hook method for subclasses
+
+	def _prep_input_df(self, input_df: pd.DataFrame) -> pd.DataFrame:
+		"""Hook method to prepare the input DataFrame. Can be overridden in subclasses."""
+		output_df = self._schema.validate(input_df)
+		return output_df
+	
+	def _on_df_setter(self):
+		"""Hook method called after setting the DataFrame. Can be overridden in subclasses."""
+		pass
+
+	def _on_df_getter(self, output_df: pd.DataFrame) -> pd.DataFrame:
+		"""Hook method called when getting the DataFrame. Can be overridden in subclasses."""
+		return output_df
+	
+	def _del_rows_of_df(self, mask_delete: pd.Series) -> None:
+		"""Delete rows from the DataFrame based on a boolean mask."""
+		if self._df is None or self._df.empty:
+			return
+		self._check_frozen()
+		new_df = self._df.loc[~mask_delete].copy().reset_index(drop=True)
+		self._df = self._schema.validate(new_df)
+	
+	def _update_rows_of_df(self, 
+						input_df: pd.DataFrame, 
+						index_cols: list[str], 
+						user_setter: bool = True,
+						prefer_input: bool = False) -> None:
+		"""Update rows in the DataFrame based on index columns.
+		Parameters:
+			input_df (pd.DataFrame): DataFrame with rows to update.
+			index_cols (list[str]): List of columns to use as index for matching rows.
+			user_setter (bool, default=True): If True, use the df setter for updating (with validation/hooks).
+			prefer_input (bool, default=False): If True, prefer values from input_df when updating rows. If false, prefer existing values.
+		"""
+		if self._df is None or self._df.empty:
+			if prefer_input and user_setter:
+				self.df = input_df  # use setter for validation and hooks
+			elif prefer_input and not user_setter:
+				self._df = self._prep_input_df(input_df)
+			return
+		self._check_frozen()
+		input_df = self._prep_input_df(input_df)
+		# Set index for efficient update
+		existing_df = self._df.set_index(index_cols)
+		input_df = input_df.set_index(index_cols)
+		if prefer_input:
+			# Update input rows with values from existing_df, prefering input values
+			input_df.update(existing_df)
+			new_df = input_df
+		else:
+			# Update existing rows with values from input_df, prefering existing values
+			existing_df.update(input_df)
+			new_df = existing_df
+		new_df.reset_index(inplace=True)
+		if user_setter:
+			self.df = new_df  # use setter for validation and hooks
+		else:
+			self._df = self._prep_input_df(new_df)
+	@property
+	def number(self) -> int:
+		"""Return the number of entries in the DataFrame."""
+		return len(self._df) if self._df is not None else 0
+
+	def _check_frozen(self):
+		if self._frozen:
+			raise AttributeError(f"This {self.__class__.__name__} instance is frozen and cannot be modified.")
 		
 class LogbooksSchema(pa.DataFrameModel):
 	"""Pandera schema for Logbooks Dataframe validation."""
@@ -87,10 +153,11 @@ class LogbooksSchema(pa.DataFrameModel):
 		
 		return is_first_journey | no_overlap
 
-class Logbooks:
+class Logbooks(BaseMobilityComponent):
 	"""
 	Class representing a logbook for vehicle journeys.
 	"""
+	_schema = LogbooksSchema # Pandera schema for validation of the logbooks DataFrame
 
 	def __init__(self,  input_df: pd.DataFrame = None, frozen: bool = False):
 		"""
@@ -111,11 +178,9 @@ class Logbooks:
 		frozen : bool, optional
 			If True, the Logbooks instance is immutable after creation. Default is False.
 		"""
-		self._df = None
-		self._frozen = frozen
+		self._event_on_locations = Event[self]()  # Event triggered on logbooks update
+		super().__init__(input_df=input_df, frozen=frozen) # call base constructor
 		self._temp_res = None # temporal resolution in hours
-		if input_df is not None:
-			self.df = input_df 
 	
 	@staticmethod
 	def _prep_input_df(input_df: pd.DataFrame) -> pd.DataFrame:
@@ -147,45 +212,18 @@ class Logbooks:
 
 		return input_df
 	
-	@property
-	def number_journeys(self) -> int:
-		"""Return the number of journeys in the logbook."""
-		return len(self._df) if self._df is not None else 0
-	
-	@property
-	def number_vehicles(self) -> int:
-		"""Return the number of vehicles in the logbook."""
-		if self._df is not None and not self._df.empty:
-			return self._df["id_vehicle"].nunique()
-		return 0
-	
-	@property
-	def df(self) -> pd.DataFrame:
-		"""Get a copy of the logbook DataFrame with calculated duration and speed columns."""
-		# Return empty df if self._df is empty
-		if self._df is None or self._df.empty:	
-			empty_df = LogbooksSchema.example(size=0)
-			empty_df['duration'] = pd.Series(dtype='float64')
-			empty_df['speed'] = pd.Series(dtype='float64')
-			return empty_df
-			
-		# Calculate duration and speed
+	def _on_df_getter(self, output_df) -> pd.DataFrame:
+		""" Add duration and speed columns to output_df for the getter."""
 		duration = (self._df["arr_dt"] - self._df["dep_dt"]).dt.total_seconds() / 3600  # in hours
 		speed = self._df["distance"] / duration  # in km/h
-		return self._df.copy().assign(duration=duration, speed=speed)
-
-	@df.setter
-	def df(self, value: pd.DataFrame):
-		"""Set logbook DataFrame with validation (replaces existing data)."""
-
-		# check if frozen
-		self._check_frozen()
-
-		# set the internal DataFrame
-		self._df = self._prep_input_df(value)
-
-		# restore location continuity after setting new dataframe
+		return output_df.assign(duration=duration, speed=speed)
+	
+	def _on_df_setter(self):
+		"""Call restore_location_continuity after setting new dataframe."""
+		self._df = self._df.sort_values(by=["id_vehicle", "dep_dt"]).reset_index(drop=True)
 		self.restore_location_continuity()
+		# Triggger event to update location labels
+		self._event_on_locations.trigger(self)
 
 	def add_journeys(self, input_df: pd.DataFrame) -> None:
 		"""
@@ -194,35 +232,31 @@ class Logbooks:
 		Parameters
 		----------
 		input_df : pd.DataFrame
-			DataFrame with journey data to add.
+			DataFrame with journey data to add including columns:
+			- id_vehicle: int
+			- dep_dt: datetime64[ns]
+			- arr_dt: datetime64[ns]
+			- dep_loc: str
+			- arr_loc: str
+			- distance: float
 		"""
-		# check if frozen
-		self._check_frozen()
-
 		# Prepare input DataFrame
 		prepared_df = self._prep_input_df(input_df)
 		
 		# Generate id_journey for new journeys
-		prepared_df["id_journey"] = prepared_df["id_journey"] + self.number_journeys
+		prepared_df["id_journey"] = prepared_df["id_journey"] + self.number
+
+		# copy of existiing df
+		existing_df = self.df
 		
 		# Append to existing DataFrame
-		self._df = pd.concat([self._df, prepared_df], ignore_index=True)
+		existing_df = pd.concat([existing_df, prepared_df], ignore_index=True)
 
 		# Sort by id_vehicle and dep_dt
-		self._df = self._df.sort_values(by=["id_vehicle", "dep_dt"]).reset_index(drop=True)
+		existing_df = existing_df.sort_values(by=["id_vehicle", "dep_dt"]).reset_index(drop=True)
 
-		# Validate DataFrame after insert using Pandera schema
-		try:
-			LogbooksSchema.validate(self._df)
-		except Exception as e:
-			# remove added journeys if validation fails
-			self.delete_journeys(id_journey=prepared_df["id_journey"].tolist(), reindex=False)
-			message = f"Adding journeys failed due to validation error. Error: {str(e)}"
-			logger.error(message)
-			raise ValueError(message)
-		
-		# restore location continuity after update
-		self.restore_location_continuity()
+		# use setter for validation and hooks
+		self.df = existing_df
 
 	def update_journeys(self, input_df: pd.DataFrame) -> None:
 		"""
@@ -234,139 +268,40 @@ class Logbooks:
 			DataFrame with journey data to update.
 			Must include 'id_journey' column.
 		"""
-		# check if frozen
-		self._check_frozen()
-
-		# validate input_df
-		LogbooksSchema.validate(input_df)
-
-		if self._df is None or self._df.empty:
-			message = "Logbooks are empty. Cannot update journeys of Logbooks."
-			logger.error(message)
-			raise ValueError(message)
-		
-		# Backup input_dataframe
-		backup_input_df = input_df.copy()
-		
-		# Update journeys: set index to id_journey for efficient lookup
-		self._df.set_index("id_journey", inplace=True)
-		input_df.set_index("id_journey", inplace=True)
-		
-		# Update all columns for journeys that exist in input_df_extended
-		self._df.update(input_df)
-		
-		self._df.reset_index(inplace=True)
-
-		# Sort by id_vehicle and dep_dt
-		input_df = input_df.sort_values(by=["id_vehicle", "dep_dt"]).reset_index(drop=True)
-		
-		# Validate the updated DataFrame
-		try:
-			LogbooksSchema.validate(self._df)
-		except Exception as e:
-			# Rollback only affected rows if validation fails
-			backup_input_df.set_index("id_journey", inplace=True)
-			self._df.set_index("id_journey", inplace=True)
-			self._df.update(backup_input_df)
-			self._df.reset_index(inplace=True)
-			message = f"Update journeys failed due to validation error: {str(e)}"
-			logger.error(message)
-			raise ValueError(message)
-		
-		# restore location continuity after update
-		self.restore_location_continuity()
+		# Update journeys using base class method
+		self._update_rows_of_df(input_df, 
+						  index_cols=["id_journey"], 
+						  user_setter=True,
+						  prefer_input=False)
 
 	@validate_call
-	def delete_journeys(self, id_journey: list, reindex: bool = True) -> None:
+	def delete_journeys(self, id_journey: list) -> None:
 		"""Delete journeys by journey ID.
 
 		Parameters
 		----------
 		id_journey : list[int]
 			List of journey IDs to delete.
-		reindex : bool, optional
-			If True (default), renumber ids after deletion.
 		"""
-		if self._df is None or self._df.empty:
-			return
-
-		# check if frozen
-		self._check_frozen()
-
-		# Build deletion mask
-		mask = self._df["id_journey"].isin(id_journey)
-		self._df = self._df.loc[~mask].copy().reset_index(drop=True)
+		# Build deletion mask and deltete rows
+		mask_delete = self._df["id_journey"].isin(id_journey)
+		self._del_rows_of_df(mask_delete)
 		
 		# Restore location continuity after deletion
 		self.restore_location_continuity()
 
-	def _delete_vehicles(self, id_vehicle: list, reindex: bool = True) -> None:
+	def _delete_vehicles(self, id_vehicle: list) -> None:
 		"""Delete all journeys of specific vehicles.
 
 		Parameters
 		----------
 		id : list[int]
 			List of vehicle IDs whose journeys should be deleted.
-		reindex : bool, optional
-			If True (default), renumber ids after deletion.
-		"""
-		if self._df is None or self._df.empty:
-			return
+		"""	
+		# Build deletion mask and deltete rows
+		mask_delete = self._df["id_vehicle"].isin(id_vehicle)
+		self._del_rows_of_df(mask_delete)
 		
-		# check if frozen
-		self._check_frozen()
-
-		# Build deletion mask
-		mask = self._df["id_vehicle"].isin(id_vehicle)
-		self._df = self._df.loc[~mask].copy().reset_index(drop=True)
-		
-		if reindex:
-			self._reindexing(type="all")
-
-	def _check_frozen(self) -> bool:
-		"""Check if the Logbooks instance is frozen (immutable)."""
-		if self._frozen == True:
-			message = "This Logbooks instance is frozen and cannot be modified."
-			logger.error(message)
-			raise AttributeError(message)
-	
-	@validate_call
-	def _reindexing(self, type:Literal["all", "id_journey", "id_vehicle"] = "all") -> None:
-		"""
-		Reindex id_vehicle and/or id_journey columns.
-		
-		- id_journey: Renumbered from 1 to number_journeys
-		- id_vehicle: Renumbered from 1 to number_vehicles
-		
-		This is useful after adding or removing journeys to maintain continuous IDs.
-
-		Parameters
-		----------
-		type : str, optional
-			Type of reindexing to perform. Options are "all" (default), "id_journey", "id_vehicle".
-		"""
-		if self._df is None or self._df.empty:
-			return
-		
-		# check if frozen
-		self._check_frozen()
-
-		if type not in ["all", "id_journey", "id_vehicle"]:
-			message = f"Invalid reindexing type {type}. Must be one of 'all', 'id_journey', 'id_vehicle'."
-			logger.error(message)
-			raise ValueError(message)
-		
-		# Sort by id_vehicle and dep_dt first
-		self._df = self._df.sort_values(by=["id_vehicle", "dep_dt"]).reset_index(drop=True)
-		
-		# Reindex id_journey from 1 to number_journeys
-		if type in ["all", "id_journey"]:
-			self._df["id_journey"] = range(1, self.number_journeys + 1)
-		
-		# Reindex id_vehicle: map unique vehicles to 1, 2, 3, ...
-		if type in ["all", "id_vehicle"]:
-			self._df["id_vehicle"] = pd.factorize(self._df["id_vehicle"])[0] + 1
-	
 	@validate_call
 	def restore_location_continuity(self, target: Literal["dep", "arr"] = "dep") -> None:
 		"""
@@ -477,7 +412,7 @@ class Logbooks:
 			distance=("distance", "sum"),
 		).reset_index(drop=True)
 
-		# set agregated df as logbook df
+		# set agregated df as logbook df using setter for validation and hooks
 		self.df = agg_df
 
 
@@ -488,7 +423,7 @@ class VehiclesSchema(pa.DataFrameModel):
 	first_day: pa.DateTime = pa.Field(coerce=True)
 	last_day: pa.DateTime = pa.Field(coerce=True)
 	id_cluster: int = pa.Field(ge=1, coerce=True,  default=1)
-	first_loc: Series[pd.Int64Dtype] = pa.Field(ge=1, nullable=True, coerce=True, default=None)
+	first_loc: Series[pd.Int64Dtype] = pa.Field(ge=0, nullable=True, coerce=True, default=None)
 	
 	class Config:
 		strict = "filter" # remove extra columns
@@ -514,10 +449,11 @@ class VehiclesSchema(pa.DataFrameModel):
 		"""Ensure id_vehicle is unique across all rows."""
 		return ~df["id_vehicle"].duplicated(keep=False)
 
-class Vehicles:
+class Vehicles(BaseMobilityComponent):
 	"""
 	Class representing vehicles with aggregated statistics from journeys.
 	"""
+	_schema = VehiclesSchema # Pandera schema for validation of the vehicles DataFrame
 
 	def __init__(self, input_df: pd.DataFrame = None, frozen: bool = False):
 		"""
@@ -536,28 +472,14 @@ class Vehicles:
 		frozen : bool, optional
 			If True, the Vehiclesinstance is immutable after creation. Default is False.
 		"""
-		self._df = None
-		self._frozen = frozen
-		if input_df is not None:
-			self.df = input_df
 		self._event_on_logbooks = Event[int]()  # Event triggered on vehicle deletion
 		self._event_on_clusters = Event[self]()  # Event triggered on vehicle update
-	
-	@property
-	def df(self) -> pd.DataFrame:
-		"""Get a copy of the vehicle DataFrame."""
-		if self._df is None or self._df.empty:
-			return VehiclesSchema.example(size=0)
+		super().__init__(input_df=input_df, frozen=frozen) # call base constructor
 
-		return self._df.copy()
-	
-	@df.setter
-	def df(self, value: pd.DataFrame):
-		"""Set vehicle DataFrame with validation (replaces existing data)."""
-		# check if frozen
-		self._check_frozen()
-		# set the internal DataFrame
-		self._df = VehiclesSchema.validate(value)
+	def _on_df_setter(self):
+		"""Call restore_location_continuity after setting new dataframe."""
+		# Triggger event to update cluster labels
+		self._event_on_clusters.trigger(self)
 	
 	def add_vehicles(self, input_df: pd.DataFrame) -> None:
 		"""
@@ -567,21 +489,24 @@ class Vehicles:
 		----------
 		input_df : pd.DataFrame
 			DataFrame with vehicle data to add.
+			Must include the following columns:
+			- id_vehicle: int
+			- first_day: datetime64[D]
+			- last_day:  datetime64[D]
+			- id_cluster:   int
+			- first_loc: int (optional)
 		"""
-		# check if frozen
-		self._check_frozen()
-
 		# Validate input DataFrame
 		new_vehicles_df = VehiclesSchema.validate(input_df)
+
+		# Create copy of existing df
+		existing_df = self.df
 		
 		# Append to existing DataFrame
-		new_df = pd.concat([self._df, new_vehicles_df], ignore_index=True)
+		new_df = pd.concat([existing_df, new_vehicles_df], ignore_index=True)
 		
-		# Validate combined DataFrame
-		self._df = VehiclesSchema.validate(new_df)
-
-		# Triggger event to update cluster labels
-		self._event_on_add_update.trigger(new_vehicles_df)
+		# use setter for validation and hooks
+		self.df = new_df
 	
 	def update_vehicles(self, input_df: pd.DataFrame) -> None:
 		"""
@@ -598,30 +523,11 @@ class Vehicles:
 			- id_cluster:   int
 			- first_loc: int (optional)
 		"""
-		# check if frozen
-		self._check_frozen()
-
-		# Validate input DataFrame
-		update_df = VehiclesSchema.validate(input_df)
-		
-		if self._df is None or self._df.empty:
-			message = "VehiclesDataFrame is empty. Cannot update vehicles."
-			logger.error(message)
-			raise ValueError(message)
-		
-		# Set index to id_vehicle for efficient lookup
-		existing_df = self._df.copy()
-		existing_df.set_index("id_vehicle", inplace=True)
-		update_df.set_index("id_vehicle", inplace=True)
-		
-		# Update all columns for vehicles that exist in update_df
-		existing_df.update(update_df)
-		
-		existing_df.reset_index(inplace=True)
-		self._df = VehiclesSchema.validate(existing_df)
-
-		# Triggger event to update cluster labels
-		self._event_on_clusters.trigger(self)
+		# Update vehicles using base class method
+		self._update_rows_of_df(input_df, 
+						  index_cols=["id_vehicle"],
+						  user_setter=True,
+						  prefer_input=False)
 	
 	def delete_vehicles(self, id_vehicle: list) -> None:
 		"""Delete vehicles by vehicle ID.
@@ -630,16 +536,10 @@ class Vehicles:
 		----------
 		id_vehicle : list[int]
 			List of vehicle IDs to delete.
-		"""
-		# check if frozen
-		self._check_frozen()
-
-		if self._df is None or self._df.empty:
-			return
-		
+		"""		
 		# Build deletion mask
 		mask = self._df["id_vehicle"].isin(id_vehicle)
-		self._df = self._df.loc[~mask].copy().reset_index(drop=True)
+		self._del_rows_of_df(mask)
 
 		# Triggger event to update cluster labels and logbooks
 		self._event_on_logbooks.trigger(id_vehicle)
@@ -652,7 +552,7 @@ class Vehicles:
 		Parameters
 		----------
 		logbooks : Logbooks
-			Logbooks instance with journey data to generate vehicles from.
+			Logbooks instance with journey data to generate vehicles from. 
 		"""
 		if isinstance(logbooks, Logbooks) == False:
 			message = "logbooks must be an instance of Logbooks class."
@@ -679,10 +579,8 @@ class Vehicles:
 		# Assign cluster as 1 for all vehicles (placeholder)
 		grouped["cluster"] = 1
 		
-		self._df = VehiclesSchema.validate(grouped)
-
-		# Triggger event to update cluster labels
-		self._event_on_clusters.trigger(self)
+		# Save as vehicles DataFrame using setter for validation and hooks
+		self.df = grouped
 	
 	def set_first_loc_from_logbooks(self, logbooks: Logbooks) -> None:
 		"""
@@ -711,34 +609,34 @@ class Vehicles:
 		if 'first_loc' in self._df.columns:
 			self._df = self._df.drop(columns=['first_loc'])
         
+		# Create a copy of the vehicle DataFrame
+		existing_df = self.df
+
 		# Merge into vehicle DataFrame
-		self._df = self._df.merge(
+		new_df = existing_df.merge(
 			first_loc,
 			on='id_vehicle',
 			how='left'
 		)
 		
 		# set first_loc of non driving vehicles to 1: nan --> 1
-		self._df.loc[self._df["first_loc"].isna(), "first_loc"] = 1
-		self._df["first_loc"] = self._df["first_loc"].astype("Int64")
-	
-	def _check_frozen(self) -> bool:
-		"""Check if the Vehiclesinstance is frozen (immutable)."""
-		if self._frozen == True:
-			message = "This Vehiclesinstance is frozen and cannot be modified."
-			logger.error(message)
-			raise AttributeError(message)
-		return False
+		new_df.loc[new_df["first_loc"].isna(), "first_loc"] = 1
+		new_df["first_loc"] = new_df["first_loc"].astype("Int64")
 
+		# Use setter for validation and hooks
+		self.df = new_df
 
 class ClustersSchema(pa.DataFrameModel):
 	"""Pandera schema for Logbooks Dataframe validation."""
 	id_cluster: int = pa.Field(ge=1, coerce=True)
 	label: str = pa.Field(coerce=True)
 	
-class Clusters:
+class Clusters(BaseMobilityComponent):
 	"Class representing clusters of vehicles."
-	def __init__(self, vehicles: Vehicles | None = None):
+
+	_schema = ClustersSchema # Pandera schema for validation of the clusters DataFrame
+
+	def __init__(self, vehicles: Vehicles | None = None, frozen: bool = False):
 		"""
 		Generate clusters DataFrame.
 
@@ -747,6 +645,7 @@ class Clusters:
 		vehicles : Vehicles, optional
 			Vehicles instance with vehicle data including 'id_cluster' column.
 		"""
+		super().__init__(input_df=None) # call base constructor
 		if vehicles is None:
 			# Initialize empty clusters DataFrame
 			self._df =ClustersSchema.example(size=0)
@@ -758,11 +657,14 @@ class Clusters:
 			message = "vehicles must be an instance of Vehicles class."
 			logger.error(message)
 			raise TypeError(message)
+		self._frozen = frozen
 
-	@property
-	def df(self) -> pd.DataFrame:
-		"""Get the Dataframe of clusters."""
-		return self._df.copy()
+	@BaseMobilityComponent.df.setter
+	def df(self, value: pd.DataFrame):
+		"""Not allowed to set clusters DataFrame directly."""
+		mssg = "Setting clusters DataFrame directly is not allowed. Use update methods instead: update_clusters_from_vehicles(), update_clusters()."
+		logger.error(mssg)
+		raise AttributeError(mssg)
 	
 	def update_clusters_from_vehicles(self, vehicles: Vehicles) -> None:
 		"""
@@ -773,34 +675,25 @@ class Clusters:
 		vehicles : Vehicles
 			Vehicles instance with vehicle data including 'id_cluster' column.
 		"""
-		# Validate vehicle DataFrame
+		# Get copy of vehicles DataFrame
 		vehicles_df = vehicles.df
 
+		# Create clusters DataFrame from unique id_cluster in vehicles
 		cluster_ids = vehicles_df["id_cluster"].unique()
 		cluster_labels = [f"Cluster {cid}" for cid in cluster_ids]
 		update_df = pd.DataFrame({
 			"id_cluster": cluster_ids,
 			"label": cluster_labels
 		})
-		update_df = ClustersSchema.validate(update_df)
-		if self._df is None or self._df.empty:
-			self._df = update_df
-			return
-		
-		existing_df = self.df
 
-		# Set index to id_cluster for efficient lookup
-		existing_df.set_index("id_cluster", inplace=True)
-		update_df.set_index("id_cluster", inplace=True)
-		
-		# Update all columns for clusters that exist in update_df
-		update_df.update(existing_df)
+		# Update clusters DataFrame using function of base class
+		self._update_rows_of_df(update_df, 
+						  index_cols=["id_cluster"], 
+						  user_setter=False,
+						  prefer_input=True)
 
-		update_df.reset_index(inplace=True)
-
-		self._df = ClustersSchema.validate(update_df)
 	
-	def update_clusters_from_df(self, input_df: pd.DataFrame) -> None:
+	def update_clusters(self, input_df: pd.DataFrame) -> None:
 		"""
 		Update existing clusters based on id_cluster. Replaces all columns for matching clusters with values from input_df.
 
@@ -812,33 +705,25 @@ class Clusters:
 			- id_cluster: int
 			- label: str
 		"""
-		# Validate input DataFrame
-		update_df = ClustersSchema.validate(input_df)
-		existing_df = self.df
-		
-		if self._df is None or self._df.empty:
-			message = "Clusters DataFrame is empty. Cannot update clusters."
-			logger.error(message)
-			raise ValueError(message)
-		
-		# Set index to id_cluster for efficient lookup
-		existing_df.set_index("id_cluster", inplace=True)
-		update_df.set_index("id_cluster", inplace=True)
-		
-		# Update all columns for clusters that exist in update_df
-		existing_df.update(update_df)
-		existing_df.reset_index(inplace=True)
-
-		self._df = ClustersSchema.validate(existing_df)
+		# Update clusters DataFrame using function of base class
+		self._update_rows_of_df(input_df, 
+						  index_cols=["id_cluster"], 
+						  user_setter=False,
+						  prefer_input=False)
 
 class LocationsSchema(pa.DataFrameModel):
 	"""Pandera schema for Logbooks Dataframe validation."""
 	location: int = pa.Field(ge=0, coerce=True)
 	label: str = pa.Field(coerce=True)
 
-class Locations:
+class Locations(BaseMobilityComponent):
 	"Class representing locations used in journeys."
-	def __init__(self, input_df: pd.DataFrame = None):
+
+	_schema = LocationsSchema # Pandera schema for validation of the locations DataFrame
+
+	def __init__(self, vehicles: Vehicles | None = None,
+			logbooks: Logbooks | None = None,
+			frozen: bool = False):
 		"""
 		Initialize Locations instance.
 
@@ -850,17 +735,85 @@ class Locations:
 			- location: int
 			- label: str
 		"""
-		if input_df is None:
-			self._df = LocationsSchema.example(size=0)
-		else:
-			self.df = input_df
+		super().__init__(input_df=None) # call base constructor
+		self.update_locations_from_logbooks_vehicles(logbooks=logbooks, vehicles=vehicles)
+		self._frozen = frozen
 
-	@property
-	def df(self) -> pd.DataFrame:
-		"""Get the Dataframe of locations."""
-		return self._df.copy()
-	
-	@df.setter
+	@BaseMobilityComponent.df.setter
 	def df(self, value: pd.DataFrame):
-		"""Set locations DataFrame with validation."""
-		self._df = LocationsSchema.validate(value)
+		"""Not allowed to set locations DataFrame directly."""
+		mssg = "Setting locations DataFrame directly is not allowed. Use update methods instead: update_locations_from_logbooks_vehicles()."
+		logger.error(mssg)
+		raise AttributeError(mssg)
+	
+	def update_locations_from_logbooks_vehicles(self, logbooks: Optional[Logbooks] = None, vehicles: Optional[Vehicles] = None) -> None:
+		"""
+		Update locations DataFrame based on unique dep_loc and arr_loc in logbooks.
+
+		Parameters
+		----------
+		logbooks : Optional[Logbooks]
+			Logbooks instance with journey data to extract locations from.
+		vehicles : Optional[Vehicles]
+			Vehicles instance with vehicle data to extract locations from.
+		"""
+		if vehicles is None and logbooks is None:
+			message = "At least one of vehicles or logbooks must be provided."
+			logger.error(message)
+			raise ValueError(message)
+		if vehicles is not None and not isinstance(vehicles, Vehicles):
+			message = "vehicles must be an instance of Vehicles class."
+			logger.error(message)
+			raise TypeError(message)
+		if logbooks is not None and not isinstance(logbooks, Logbooks):
+			message = "logbooks must be an instance of Logbooks class."
+			logger.error(message)
+			raise TypeError(message)
+		
+		logbooks_df = logbooks.df
+		
+		if logbooks_df is None or logbooks_df.empty:
+			return
+		
+		# Get unique locations from vehicles and logbooks
+		all_locs = [0]  # include location 0 by default for driving
+		if vehicles is not None:
+			loc_vehicles = vehicles.df["first_loc"].dropna().unique().tolist()
+			all_locs.extend(loc_vehicles)
+		if logbooks is not None:
+			dep_locs = logbooks_df["dep_loc"].unique().tolist()
+			arr_locs = logbooks_df["arr_loc"].unique().tolist()
+			all_locs.extend(dep_locs)
+			all_locs.extend(arr_locs)
+		all_locs = sorted(set(all_locs))
+
+		# Create new locations DataFrame
+		new_locations_df = pd.DataFrame({
+			"location": all_locs,
+			"label": [f"Location {loc}" for loc in all_locs]
+		})
+		# Update locations DataFrame: 0 = driving, 1 = home
+		new_locations_df.loc[new_locations_df["location"] == 0, "label"] = "Driving"
+		new_locations_df.loc[new_locations_df["location"] == 1, "label"] = "Home"
+
+		self._update_rows_of_df(new_locations_df, 
+						  index_cols=["location"], 
+						  user_setter=False,
+						  prefer_input=True)
+
+	def update_locations(self, input_df: pd.DataFrame) -> None:
+		"""
+		Update existing locations based on location ID. Replaces all columns for matching locations with values from input_df.
+
+		Parameters
+		----------
+		input_df : pd.DataFrame
+			DataFrame with location data to update.
+			Must include the following columns:
+			- location: int
+			- label: str
+		"""
+		self._update_rows_of_df(input_df, 
+						  index_cols=["location"], 
+						  user_setter=False, 
+						  prefer_input=False)
