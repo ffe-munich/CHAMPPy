@@ -22,7 +22,7 @@ jobs:
         run: pip install -e ".[dev]"
       
       - name: Run Black
-        run: black -l 120 --check ./src/champpy/ ./tests/
+        run: black -l 120 --check ./src/champpy/ ./tests/ ./scripts/
 
   flake8:
     name: Flake8 Linting
@@ -39,4 +39,4 @@ jobs:
         run: pip install -e ".[dev]"
       
       - name: Run Flake8
-        run: flake8 --max-line-length=120 --ignore=E501,E712,E203,W503 ./src/champpy/ ./tests/
+        run: flake8 --max-line-length=120 --ignore=E501,E712,E203,W503 ./src/champpy/ ./tests/ ./scripts/
