@@ -191,10 +191,10 @@ class TypeDays:
 
         # Check for type of class
         if isinstance(index_weekday, pd.Series) or isinstance(index_weekday, pd.Index):
-            # convert to numpy array for faster processing
-            index_weekday_array = index_weekday.to_numpy()
+            # convert to numpy array for faster processing (ensure writable)
+            index_weekday_array = index_weekday.to_numpy(copy=True)
         elif isinstance(index_weekday, np.ndarray):
-            index_weekday_array = index_weekday
+            index_weekday_array = np.array(index_weekday, copy=True)
         else:
             raise TypeError("Input must be int, pd.Series, pd.Index, or np.ndarray.")
 
