@@ -24,7 +24,7 @@ def raw_logbook_df():
 def raw_vehicle_df():
     """Fixture to load example raw vehicle DataFrame from CSV."""
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    vehicle_path = os.path.join(base_dir, "data","example1", "t_vehicle.csv")
+    vehicle_path = os.path.join(base_dir, "data", "example1", "t_vehicle.csv")
     return pd.read_csv(vehicle_path, parse_dates=["first_day", "last_day"])
 
 

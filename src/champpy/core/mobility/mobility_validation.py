@@ -562,12 +562,12 @@ class MobPlotter:
             df_share_loc,
             x=df_share_loc.index,
             y=df_share_loc.columns,
-            color_discrete_sequence=[f"rgba({r*255},{g*255},{b*255},1.0)" for r, g, b in self._rgb_color],
+            color_discrete_sequence=[f"rgba({r * 255},{g * 255},{b * 255},1.0)" for r, g, b in self._rgb_color],
         )
 
         # Set explicit colors with full opacity to each trace
         for idx, (trace, color) in enumerate(zip(fig.data, self._rgb_color)):
-            rgba_color = f"rgba({int(color[0]*255)},{int(color[1]*255)},{int(color[2]*255)},1.0)"
+            rgba_color = f"rgba({int(color[0] * 255)},{int(color[1] * 255)},{int(color[2] * 255)},1.0)"
             trace.fillcolor = rgba_color
             trace.line.color = rgba_color
             trace.opacity = 1.0
@@ -750,9 +750,9 @@ class MobPlotter:
         """Show the RGB colors used in the plots as a bar chart."""
         df = pd.DataFrame(
             {
-                "Color": [f"Color {i+1}" for i in range(len(self._rgb_color))],
+                "Color": [f"Color {i + 1}" for i in range(len(self._rgb_color))],
                 "Value": [1] * len(self._rgb_color),
-                "RGB": [f"rgb({int(r*255)},{int(g*255)},{int(b*255)})" for r, g, b in self._rgb_color],
+                "RGB": [f"rgb({int(r * 255)},{int(g * 255)},{int(b * 255)})" for r, g, b in self._rgb_color],
             }
         )
         fig = px.bar(df, x="Color", y="Value", color="Color", color_discrete_sequence=df["RGB"], text="Color")

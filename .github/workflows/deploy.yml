@@ -4,7 +4,7 @@ name: Deploy
 # This workflow will be used to deploy the package to PyPI or other platforms
 
 on:
-	workflow_dispatch:
+  workflow_dispatch:
 
 
 
