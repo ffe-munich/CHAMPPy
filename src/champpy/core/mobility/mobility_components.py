@@ -20,7 +20,7 @@ class BaseMobilityComponent(ABC):
 
     _schema = None  # Overridden in subclasses with specific Pandera schema
 
-    def __init__(self, input_df: pd.DataFrame | None = None, frozen: bool = False):
+    def __init__(self, input_df: Optional[pd.DataFrame] = None, frozen: bool = False):
         """Initialize a BaseMobilityComponent instance."""
         self._frozen = frozen
         if input_df is not None:
