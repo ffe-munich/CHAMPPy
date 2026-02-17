@@ -1,5 +1,4 @@
 from typing import TypeVar, Generic, Callable, List
-import tomli
 import logging
 from pathlib import Path
 
@@ -30,49 +29,22 @@ class Event(Generic[T]):
 
 
 def get_plot_path(relative_path: Path) -> Path:
-    """Get the absolute output path by reading configuration from pyproject.toml.
-
-    Searches for pyproject.toml starting from the current working directory first (for notebooks),
-    then from the module location (for scripts).
-    """
-    # Try to find project root starting from current working directory (for Jupyter notebooks)
+    """Get the absolute output path using the default plots folder."""
     current = Path.cwd()
-    project_root = None
+    plots_dir = "plots"
 
-    logger.debug(f"get_plot_path called with: {relative_path}")
-    logger.debug(f"Current working directory: {current}")
-
-    # Search upwards from current working directory
     while current != current.parent:
-        if (current / "pyproject.toml").exists():
-            project_root = current
-            logger.debug(f"Found project root from cwd: {project_root}")
-            break
+        candidate = current / plots_dir
+        if candidate.exists():
+            result = candidate / relative_path
+            logger.debug(f"get_plot_path called with: {relative_path}")
+            logger.debug(f"Current working directory: {current}")
+            logger.debug(f"Returning plot path: {result}")
+            return result
         current = current.parent
 
-    # If not found from cwd, try from module location (for installed packages)
-    if not project_root:
-        current = Path(__file__).resolve().parent
-        logger.debug(f"Searching from module location: {current}")
-        while current != current.parent:
-            if (current / "pyproject.toml").exists():
-                project_root = current
-                logger.debug(f"Found project root from module: {project_root}")
-                break
-            current = current.parent
-
-    # If pyproject.toml found, read plot_dir configuration
-    if project_root and tomli:
-        try:
-            with open(project_root / "pyproject.toml", "rb") as f:
-                config = tomli.load(f)
-                plot_dir = config.get("tool", {}).get("champpy", {}).get("plot_dir", "plots")
-                result = project_root / plot_dir / relative_path
-                logger.debug(f"Returning plot path: {result}")
-                return result
-        except Exception as e:
-            logger.debug(f"Could not read pyproject.toml: {e}")
-
-    # Fallback: if installed as package, write to current working directory
-    logger.debug("Using current working directory as output path (package installation mode)")
-    return Path.cwd() / relative_path
+    result = Path.cwd() / plots_dir / relative_path
+    logger.debug(f"get_plot_path called with: {relative_path}")
+    logger.debug(f"Current working directory: {current}")
+    logger.debug(f"Returning plot path: {result}")
+    return result
