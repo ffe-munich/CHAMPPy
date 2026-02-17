@@ -39,6 +39,6 @@ def test_mobility_model_generation(params_loader):
     )
     mob_profiles = mob_model.generate_mob_profiles(user_params=user_params)
     # Check that mob_profiles has a DataFrame attribute and is not empty
-    assert hasattr(mob_profiles, "df")
-    assert isinstance(mob_profiles.df, pd.DataFrame)
-    assert not mob_profiles.df.empty
+    assert hasattr(mob_profiles.logbooks, "df")
+    assert isinstance(mob_profiles.logbooks.df, pd.DataFrame)
+    assert not mob_profiles.logbooks.df.empty
