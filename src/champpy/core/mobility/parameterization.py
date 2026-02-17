@@ -457,7 +457,7 @@ class ParamsLoader:
         # Load info for existing params
         info_df = self.load_info()
         if info_df.empty:
-            mssg = f"There are no existing parameters."
+            mssg = "There are no existing parameters."
             logger.error(mssg)
             raise ValueError(mssg)
         if id_params is not None and id_params not in info_df["id_params"].values:
