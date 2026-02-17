@@ -108,7 +108,6 @@ class MobData:
 
         # Make sure vehicle IDs and clusters are unique across both datasets
         max_id_vehicle = self.vehicles.df["id_vehicle"].max() if not self.vehicles.df.empty else 0
-        max_cluster = self.vehicles.df["id_cluster"].max() if not self.vehicles.df.empty else 0
         new_vehicles_df["id_vehicle"] += max_id_vehicle
         new_logbooks_df["id_vehicle"] += max_id_vehicle
 

@@ -116,7 +116,7 @@ class MobPlotter:
             logo_data_uri = f"data:image/svg+xml;base64,{logo_base64}"
 
             with open(output_file, "w", encoding="utf-8") as f:
-                f.write(f"<html><head><title>CHAMPPy Mobility plots</title>")
+                f.write("<html><head><title>CHAMPPy Mobility plots</title>")
                 f.write(f"<style>body {{ font-family: {self._font_family}; margin: 0; padding: 20px; }} ")
                 f.write(".header { display: flex; align-items: center; gap: 1050px; } ")
                 f.write(".logo { height: 50px; width: auto; }</style></head><body>\n")

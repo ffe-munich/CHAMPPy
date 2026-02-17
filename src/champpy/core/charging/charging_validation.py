@@ -343,7 +343,6 @@ class ChargingPlotter:
 
         for idx_cluster, cluster in enumerate(unique_id_cluster):
             row_idx = idx_cluster + 1
-            cluster_color = f"rgb({self._rgb_color[cluster][0] * 255},{self._rgb_color[cluster][1] * 255},{self._rgb_color[cluster][2] * 255})"
 
             def _series(df):
                 return (
