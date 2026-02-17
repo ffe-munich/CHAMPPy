@@ -6,5 +6,12 @@ name: Deploy
 on:
   workflow_dispatch:
 
+jobs:
+  noop:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Skip deployment (not configured)
+        run: echo "Deploy workflow not configured yet."
+
 
 
