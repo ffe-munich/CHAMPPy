@@ -1,5 +1,5 @@
 import pandas as pd
-import pandera.pandas as pa
+import pandera as pa
 from pandera.typing import Series
 import logging
 from typing import Literal, Optional
