@@ -6,17 +6,17 @@ from champpy.core.mobility.mobility_data import MobData  # noqa: F401
 from champpy.core.mobility.mobility_cleaning import MobDataCleaner, UserParamsCleaning, LimitConfig  # noqa: F401
 from champpy.core.mobility.parameterization import Parameterizer, UserParamsParameterizer, ParamsLoader  # noqa: F401
 from champpy.core.mobility.mobility_model import MobModel, UserParamsMobModel  # noqa: F401
-from champpy.core.mobility.mobility_validation import (
+from champpy.core.mobility.mobility_validation import (  # noqa: F401
     MobPlotter,
     UserParamsMobPlotter,
     MobilityCharacteristics,
-)  # noqa: F401
-from champpy.core.charging.charging_model import (
+)
+from champpy.core.charging.charging_model import (  # noqa: F401
     ChargingModel,
     ChargingArray,
     UserParamsChargingModel,
     ChargingData,
-)  # noqa: F401
+)
 from champpy.core.charging.charging_validation import (  # noqa: F401
     ChargingPlotter,
     UserParamsChargingPlotter,
