@@ -15,6 +15,9 @@ from champpy.core.mobility.mobility_data import MobData, MobDataExtended
 from champpy.utils.time_utils import TypeDays, get_week_index
 from champpy.utils.data_utils import get_plot_path
 
+DATA_DIR = files("champpy").joinpath("data")
+FFE_LOGO_DIR = DATA_DIR / "ffe_logo.svg"
+
 logger = logging.getLogger(__name__)
 
 
@@ -110,8 +113,7 @@ class MobPlotter:
             Path(output_file).parent.mkdir(parents=True, exist_ok=True)
 
             # Load logo from package resources and encode as base64
-            logo_path = files("champpy").joinpath("data/ffe_logo.svg")
-            logo_svg = logo_path.read_text(encoding="utf-8")
+            logo_svg = FFE_LOGO_DIR.read_text(encoding="utf-8")
             logo_base64 = base64.b64encode(logo_svg.encode("utf-8")).decode("utf-8")
             logo_data_uri = f"data:image/svg+xml;base64,{logo_base64}"
 
