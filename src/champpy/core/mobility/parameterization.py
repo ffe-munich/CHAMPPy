@@ -15,7 +15,6 @@ from champpy.utils.time_utils import get_day_index, TypeDays
 from champpy.core.mobility.mobility_data import MobData, MobDataExtended
 from champpy.core.mobility.mobility_validation import MobilityCharacteristics
 
-
 # Define paths to data files using importlib.resources
 DATA_DIR = files("champpy").joinpath("data")
 PARAMS_DIR = DATA_DIR / "params.parquet"
@@ -457,7 +456,7 @@ class ParamsLoader:
         """Load existing ModelParams."""
 
         logger.info("Load parameters with id_params=%s.", id_params)
-        
+
         # Load info for existing params
         info_df = self.load_info()
         if info_df.empty:
