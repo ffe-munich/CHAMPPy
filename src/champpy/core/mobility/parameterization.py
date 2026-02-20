@@ -449,7 +449,7 @@ class ParamsLoader:
 
     def load_info(self) -> pd.DataFrame:
         """Load info DataFrame from params_info.parquet, return empty DataFrame if not found."""
-        if not self.dir_info.exists():
+        if not PARAMS_INFO_DIR.exists():
             return pd.DataFrame()
         return pd.read_parquet(PARAMS_INFO_DIR)
 
@@ -457,7 +457,7 @@ class ParamsLoader:
         """Load existing ModelParams."""
 
         logger.info("Load parameters with id_params=%s.", id_params)
-
+        
         # Load info for existing params
         info_df = self.load_info()
         if info_df.empty:
@@ -560,7 +560,7 @@ class ParamsLoader:
         params_df = self._convert_params_df_tm2list(params_df)
 
         # load existing params DataFrame
-        if self.dir_params.exists():
+        if PARAMS_DIR.exists():
             params_existing_df = self._load_only_params()
             # append new params
             params_df = pd.concat([params_existing_df, params_df], ignore_index=True)
