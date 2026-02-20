@@ -15,6 +15,12 @@ from champpy.utils.time_utils import get_day_index, TypeDays
 from champpy.core.mobility.mobility_data import MobData, MobDataExtended
 from champpy.core.mobility.mobility_validation import MobilityCharacteristics
 
+
+# Define paths to data files using importlib.resources
+DATA_DIR = files("champpy").joinpath("data")
+PARAMS_DIR = DATA_DIR / "params.parquet"
+PARAMS_INFO_DIR = DATA_DIR / "params_info.parquet"
+
 logger = logging.getLogger(__name__)
 
 
@@ -440,14 +446,12 @@ class ParamsLoader:
             )
         else:
             self.user_name = user_name
-        self.dir_params = files("champpy").joinpath("data", "params.parquet")
-        self.dir_info = files("champpy").joinpath("data", "params_info.parquet")
 
     def load_info(self) -> pd.DataFrame:
         """Load info DataFrame from params_info.parquet, return empty DataFrame if not found."""
         if not self.dir_info.exists():
             return pd.DataFrame()
-        return pd.read_parquet(self.dir_info)
+        return pd.read_parquet(PARAMS_INFO_DIR)
 
     def load_params(self, id_params: int = None) -> ModelParams:
         """Load existing ModelParams."""
@@ -494,9 +498,9 @@ class ParamsLoader:
         """Load only params DataFrame from params.parquet."""
         # Load params DataFrame
         if id_params is not None:
-            params_df = pd.read_parquet(self.dir_params, filters=[("id_params", "==", id_params)])
+            params_df = pd.read_parquet(PARAMS_DIR, filters=[("id_params", "==", id_params)])
         else:
-            params_df = pd.read_parquet(self.dir_params)
+            params_df = pd.read_parquet(PARAMS_DIR)
         return params_df
 
     def _save_params(self, params: ModelParams) -> int:
@@ -546,7 +550,7 @@ class ParamsLoader:
             info_df = pd.concat([info_df, pd.DataFrame([vars(params.info)])], ignore_index=True)
 
         # Save info DataFrame
-        info_df.to_parquet(self.dir_info, index=False)
+        info_df.to_parquet(PARAMS_INFO_DIR, index=False)
 
         # Add id_params to params DataFrame
         params.df["id_params"] = new_id
@@ -562,7 +566,7 @@ class ParamsLoader:
             params_df = pd.concat([params_existing_df, params_df], ignore_index=True)
 
         # Save params DataFrame
-        params_df.to_parquet(self.dir_params, index=False)
+        params_df.to_parquet(PARAMS_DIR, index=False)
 
         return new_id
 
@@ -577,14 +581,14 @@ class ParamsLoader:
 
         # Delete from info DataFrame
         info_df = info_df[info_df["id_params"] != id_params]
-        info_df.to_parquet(self.dir_info, index=False)
+        info_df.to_parquet(PARAMS_INFO_DIR, index=False)
 
         # Load params DataFrame
         params_df = self._load_only_params()
 
         # Delete from params DataFrame
         params_df = params_df[params_df["id_params"] != id_params]
-        params_df.to_parquet(self.dir_params, index=False)
+        params_df.to_parquet(PARAMS_DIR, index=False)
 
     @classmethod
     def deep_to_numpy(cls, arr):
