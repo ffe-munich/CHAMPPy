@@ -38,3 +38,6 @@ Thumbs.db
 data/mob_profiles/
 data/charge_profiles/
 plots/*.html
+
+# Docs
+docs/_build/
