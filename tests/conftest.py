@@ -29,21 +29,21 @@ def raw_vehicle_df():
 
 
 @pytest.fixture
-def mob_data1(raw_logbook_df, raw_vehicle_df):
-    """MobData fixture created with both logbook and vehicle data."""
-    return mob.MobData(input_logbooks_df=raw_logbook_df, input_vehicles_df=raw_vehicle_df)
+def mob_profiles1(raw_logbook_df, raw_vehicle_df):
+    """MobProfiles fixture created with both logbook and vehicle data."""
+    return mob.MobProfiles(input_logbooks_df=raw_logbook_df, input_vehicles_df=raw_vehicle_df)
 
 
 @pytest.fixture
-def mob_data2(raw_logbook_df):
-    """MobData fixture created just with logbook data."""
-    return mob.MobData(input_logbooks_df=raw_logbook_df)
+def mob_profiles2(raw_logbook_df):
+    """MobProfiles fixture created just with logbook data."""
+    return mob.MobProfiles(input_logbooks_df=raw_logbook_df)
 
 
 @pytest.fixture
-def mob_data3(raw_logbook_df, raw_vehicle_df):
-    """MobData fixture with specific cluster assignments."""
+def mob_profiles3(raw_logbook_df, raw_vehicle_df):
+    """MobProfiles fixture with specific cluster assignments."""
     raw_vehicle_df.loc[20:30, "id_cluster"] = 2
     raw_vehicle_df.loc[40:50, "id_cluster"] = 5
-    mob_data = mob.MobData(input_logbooks_df=raw_logbook_df, input_vehicles_df=raw_vehicle_df)
-    return mob_data
+    mob_profiles = mob.MobProfiles(input_logbooks_df=raw_logbook_df, input_vehicles_df=raw_vehicle_df)
+    return mob_profiles
