@@ -7,9 +7,8 @@
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = "ChAMPPy"
-copyright = "2026, Florian Biedenbach"
+copyright = "2026, FfE Munich"
 author = "Florian Biedenbach"
-release = "1.0.0"
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
@@ -17,9 +16,15 @@ release = "1.0.0"
 import os
 import sys
 import shutil
+import tomllib
 from pathlib import Path
 
 sys.path.insert(0, os.path.abspath("../"))
+
+# Read version from pyproject.toml
+with open(os.path.join(os.path.dirname(__file__), "..", "pyproject.toml"), "rb") as f:
+    _pyproject = tomllib.load(f)
+release = _pyproject["project"]["version"]
 # sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
 extensions = [
