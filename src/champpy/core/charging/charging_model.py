@@ -190,10 +190,14 @@ class ElectricVehicles(Vehicles):
         for param in param_list:
             if not hasattr(user_params, param):
                 raise ValueError(f"user_params must have attribute '{param}'")
-            vehicles_df[param] = self._convert_userparam_to_arrays(getattr(user_params, param), num_vehicles)
+            vehicles_df[param] = self._convert_userparam_to_arrays(
+                getattr(user_params, param), num_vehicles
+            )
         super().__init__(vehicles_df)
 
-    def _convert_userparam_to_arrays(self, user_param: list[float], num_vehicles: int) -> np.ndarray:
+    def _convert_userparam_to_arrays(
+        self, user_param: list[float], num_vehicles: int
+    ) -> np.ndarray:
         """Convert user parameters to arrays matching the number of vehicles."""
         arr = np.asarray(user_param)
         if arr.size == 1:
@@ -205,23 +209,34 @@ class ElectricVehicles(Vehicles):
 
     def generate_vehicles_from_logbooks(self, logbooks):
         """Not allowed for ElectricVehicles. Only implemented for Vehicles class ."""
-        raise AttributeError("generate_vehicles_from_logbooks is not available for ElectricVehicles class.")
+        raise AttributeError(
+            "generate_vehicles_from_logbooks is not available for ElectricVehicles class."
+        )
 
     def delete_vehicles(self, id_vehicle):
         """Not allowed for ElectricVehicles. Only implemented for Vehicles class ."""
-        raise AttributeError("delete_vehicles is not available for ElectricVehicles class.")
+        raise AttributeError(
+            "delete_vehicles is not available for ElectricVehicles class."
+        )
 
     def set_first_loc_from_logbooks(self, logbooks):
         """Not allowed for ElectricVehicles. Only implemented for Vehicles class ."""
-        raise AttributeError("set_first_loc_from_logbooks is not available for ElectricVehicles class.")
+        raise AttributeError(
+            "set_first_loc_from_logbooks is not available for ElectricVehicles class."
+        )
 
     def update_vehicles(self, input_df):
         """Not allowed for ElectricVehicles. Only implemented for Vehicles class ."""
-        raise AttributeError("update_vehicles is not available for ElectricVehicles class.")
-    
+        raise AttributeError(
+            "update_vehicles is not available for ElectricVehicles class."
+        )
+
     def add_vehicles(self, input_df):
         """Not allowed for ElectricVehicles. Only implemented for Vehicles class ."""
-        raise AttributeError("add_vehicles is not available for ElectricVehicles class.")
+        raise AttributeError(
+            "add_vehicles is not available for ElectricVehicles class."
+        )
+
 
 @dataclass
 class ChargingArray:
@@ -242,7 +257,7 @@ class ChargingTimeseries:
     Each row corresponds to a time step and a vehicle and contains information
     about charging status, energy consumption, energy stored, charging power,
     and missing energy.
-    
+
     The DataFrame (accessible via the `df` property) contains the following columns:
 
     .. list-table::
@@ -277,12 +292,18 @@ class ChargingTimeseries:
     def __init__(self, charging_array: ChargingArray):
 
         if isinstance(charging_array, ChargingArray) is False:
-            raise ValueError("charging_array must be an instance of ChargingArray class.")
+            raise ValueError(
+                "charging_array must be an instance of ChargingArray class."
+            )
 
         self._df = pd.DataFrame(
             {
-                "id_vehicle": np.tile(charging_array.id_vehicle, len(charging_array.datetime)),
-                "datetime": np.repeat(charging_array.datetime, len(charging_array.id_vehicle)),
+                "id_vehicle": np.tile(
+                    charging_array.id_vehicle, len(charging_array.datetime)
+                ),
+                "datetime": np.repeat(
+                    charging_array.datetime, len(charging_array.id_vehicle)
+                ),
                 "connected": charging_array.connected.ravel(),
                 "energy_consumption_kwh": charging_array.energy_consumption_kwh.ravel(),
                 "energy_stored_kwh": charging_array.energy_stored_kwh.ravel(),
@@ -292,7 +313,9 @@ class ChargingTimeseries:
         )
 
         # Sort df by id_vehicle and datetime
-        self._df = self._df.sort_values(by=["id_vehicle", "datetime"]).reset_index(drop=True)
+        self._df = self._df.sort_values(by=["id_vehicle", "datetime"]).reset_index(
+            drop=True
+        )
 
     @property
     def df(self):
@@ -311,15 +334,20 @@ class ChargingProfiles:
     charging_timeseries: :class:`ChargingTimeseries`
             Contains the charging data for each vehicle over time.
     vehicles: :class:`ElectricVehicles`
-            Contains vehicle-specific data about each vehicle, 
-            such as its first and last day of activity, cluster assignment, battery capacity, max. charging power etc. 
+            Contains vehicle-specific data about each vehicle,
+            such as its first and last day of activity, cluster assignment, battery capacity, max. charging power etc.
             It is connected to logbooks via `id_vehicle`.
     clusters: :class:`Clusters`
             Describes the clusters defined in vehicles. It is connected to vehicles via `id_cluster`.
-            It provides a label for each cluster.    
+            It provides a label for each cluster.
     """
 
-    def __init__(self, charging_array: ChargingArray, vehicles: ElectricVehicles, clusters: Clusters):
+    def __init__(
+        self,
+        charging_array: ChargingArray,
+        vehicles: ElectricVehicles,
+        clusters: Clusters,
+    ):
         self.charging_timeseries = ChargingTimeseries(charging_array)
         self.vehicles = vehicles
         self.clusters = clusters
@@ -329,30 +357,30 @@ class ChargingModel:
     """
     Model for generating charging profiles from mobility data and user parameters.
 
-    The model uses an algorithm that iterates over each time step and each vehicle to determine 
-    the charging status, energy consumption, energy stored, and missing energy based on the mobility data 
+    The model uses an algorithm that iterates over each time step and each vehicle to determine
+    the charging status, energy consumption, energy stored, and missing energy based on the mobility data
     and user parameters. The resulting charging profiles are stored in a :class:`ChargingProfiles` object.
-    
+
     Parameters
     ----------
     mob_profiles : :class:`~champpy.MobProfiles`
         Mobility profiles containing vehicle movement data and temporal information.
-    
+
     Examples
     --------
     Generate charging profiles for synthetic mobility data:
-    
+
     .. code-block:: python
-    
+
         from champpy import MobModel, ChargingModel, UserParamsChargingModel
-        
+
         # Generate synthetic mobility profiles
         mob_model = MobModel(model_params)
         mob_profiles = mob_model.generate_mob_profiles(num_vehicles=100, days=7)
-        
+
         # Create charging model
         charging_model = ChargingModel(mob_profiles)
-        
+
         # Configure charging parameters
         charging_params = UserParamsChargingModel(
             energy_consumption_kwh_per_km=[0.2],
@@ -360,7 +388,7 @@ class ChargingModel:
             charging_power_max_kw=[7.0],
             charging_locations=[1]  # Charge at locations 1
         )
-        
+
         # Generate charging profiles
         charging_profiles = charging_model.generate_charging_profiles(charging_params)
     """
@@ -383,7 +411,9 @@ class ChargingModel:
         self._dt = self._mob_arrays.datetime
         self._id_vehicle = self._mob_arrays.id_vehicle
 
-    def generate_charging_profiles(self, user_params: UserParamsChargingModel) -> ChargingProfiles:
+    def generate_charging_profiles(
+        self, user_params: UserParamsChargingModel
+    ) -> ChargingProfiles:
         """
         Generate charging profiles from mobility data and charging parameters.
 
@@ -405,25 +435,37 @@ class ChargingModel:
         self._predefine_vars(vehicles, user_params)
 
         # Determine connection status array
-        connected_array = np.isin(self._mob_arrays.location, user_params.charging_locations)
+        connected_array = np.isin(
+            self._mob_arrays.location, user_params.charging_locations
+        )
         self._charging_array.connected = connected_array
 
         # Determien energy consumption
         if user_params.distribute_energy_consumption:
-            energy_consumption_array = self._mob_arrays.distance_distributed * self._energy_cons_array
+            energy_consumption_array = (
+                self._mob_arrays.distance_distributed * self._energy_cons_array
+            )
         else:
-            energy_consumption_array = self._mob_arrays.distance * self._energy_cons_array
+            energy_consumption_array = (
+                self._mob_arrays.distance * self._energy_cons_array
+            )
         self._charging_array.energy_consumption_kwh = energy_consumption_array
 
         # Determine minimum soc departure from required driving energy and min soc at departure
         soc_min_departure_array = self._determine_min_soc_departure()
-        energy_min_departure_array = soc_min_departure_array * self._battery_capacity_array
+        energy_min_departure_array = (
+            soc_min_departure_array * self._battery_capacity_array
+        )
 
-        mssg = "Generating charging profiles based on mobility data and user parameters..."
+        mssg = (
+            "Generating charging profiles based on mobility data and user parameters..."
+        )
         logging.info(mssg)
 
         # Loop over timesteps and evs
-        for t in track(range(0, self._number_steps), description="Generating charging profiles:"):
+        for t in track(
+            range(0, self._number_steps), description="Generating charging profiles:"
+        ):
             # Get stored energy at beginning of timestep
             if t != 0:
                 # set stored energy for current timestep to the one at the previous timestep
@@ -436,17 +478,29 @@ class ChargingModel:
             stored_energy = stored_energy - energy_consumption_array[t, :]
 
             # Check which vehicles are connected
-            mask_con = connected_array[t, :] & (energy_min_departure_array[t, :] > stored_energy)
+            mask_con = connected_array[t, :] & (
+                energy_min_departure_array[t, :] > stored_energy
+            )
 
             # Charge connected vehicles
-            energy_to_charge = energy_min_departure_array[t, mask_con] - stored_energy[mask_con]
-            necessary_power = energy_to_charge / (self._efficiency_charging_array[mask_con] * user_params.temp_res)
+            energy_to_charge = (
+                energy_min_departure_array[t, mask_con] - stored_energy[mask_con]
+            )
+            necessary_power = energy_to_charge / (
+                self._efficiency_charging_array[mask_con] * user_params.temp_res
+            )
             maximum_power = self._charging_power_max_array[mask_con]
             charging_power = np.minimum(maximum_power, necessary_power)
-            energy_charged = charging_power * self._efficiency_charging_array[mask_con] * user_params.temp_res
+            energy_charged = (
+                charging_power
+                * self._efficiency_charging_array[mask_con]
+                * user_params.temp_res
+            )
 
             # Determine missing energy of not connected vehicles
-            energy_min = self._soc_min_array[~mask_con] * self._battery_capacity_array[~mask_con]
+            energy_min = (
+                self._soc_min_array[~mask_con] * self._battery_capacity_array[~mask_con]
+            )
             missing_energy = np.maximum(0, energy_min - stored_energy[~mask_con])
             stored_energy[~mask_con] = stored_energy[~mask_con] + missing_energy
             # TODO: Missing energy soll pro Fahrt nur einmal berechnet werden, nicht pro Zeitschritt
@@ -458,10 +512,14 @@ class ChargingModel:
             self._charging_array.energy_missing_kwh[t, ~mask_con] = missing_energy
 
         # Create charging_profiles
-        charging_profiles = ChargingProfiles(self._charging_array, vehicles=vehicles, clusters=self._clusters)
+        charging_profiles = ChargingProfiles(
+            self._charging_array, vehicles=vehicles, clusters=self._clusters
+        )
         return charging_profiles
 
-    def _predefine_vars(self, vehicles: ElectricVehicles, user_params: UserParamsChargingModel):
+    def _predefine_vars(
+        self, vehicles: ElectricVehicles, user_params: UserParamsChargingModel
+    ):
         """Predefine variables needed for charging profile calculations."""
 
         # Dictionary: UserParams-Name -> Target-Array-Name
@@ -490,11 +548,19 @@ class ChargingModel:
 
     def _determine_min_soc_departure(self) -> np.ndarray:
         """Determine minimum state of charge required for departure."""
-        soc_min_departure_raw = self._mob_arrays.distance * self._energy_cons_array / self._battery_capacity_array
-        soc_min_departure_array = pd.DataFrame(soc_min_departure_raw).replace(0, np.nan).bfill().to_numpy()
+        soc_min_departure_raw = (
+            self._mob_arrays.distance
+            * self._energy_cons_array
+            / self._battery_capacity_array
+        )
+        soc_min_departure_array = (
+            pd.DataFrame(soc_min_departure_raw).replace(0, np.nan).bfill().to_numpy()
+        )
         soc_min_departure_array = np.nan_to_num(soc_min_departure_array, nan=1)
         # Minimum soc at departure
-        min_dep = np.broadcast_to(self._soc_min_dep_array, soc_min_departure_array.shape)
+        min_dep = np.broadcast_to(
+            self._soc_min_dep_array, soc_min_departure_array.shape
+        )
         soc_min_departure_array = np.maximum(soc_min_departure_array, min_dep)
         # Maximum soc at departure
         max_dep = 1.0

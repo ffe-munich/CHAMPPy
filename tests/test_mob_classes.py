@@ -16,7 +16,9 @@ def test_mobdata_logbook_only(mob_profiles2):
 
 def test_delete_and_add_journeys(mob_profiles1):
     id_to_delete = [2, 3]
-    logbook_df_backup = mob_profiles1.logbooks.df[mob_profiles1.logbooks.df["id_journey"].isin(id_to_delete)].copy()
+    logbook_df_backup = mob_profiles1.logbooks.df[
+        mob_profiles1.logbooks.df["id_journey"].isin(id_to_delete)
+    ].copy()
     # Delete journeys
     mob_profiles1.logbooks.delete_journeys(id_journey=id_to_delete)
     assert not mob_profiles1.logbooks.df["id_journey"].isin(id_to_delete).any()
@@ -49,16 +51,23 @@ def test_reindexing(mob_profiles2):
     mob_profiles.reindexing("all")
     assert mob_profiles.clusters.df["id_cluster"].is_monotonic_increasing
     assert mob_profiles.clusters.df["id_cluster"].iloc[0] == 1
-    assert mob_profiles.vehicles.df["id_cluster"].max() == mob_profiles.clusters.df["id_cluster"].max()
+    assert (
+        mob_profiles.vehicles.df["id_cluster"].max()
+        == mob_profiles.clusters.df["id_cluster"].max()
+    )
     # Add further checks as needed
 
 
 def test_update_journeys(mob_profiles2):
     mob_profiles = mob_profiles2
-    update_df = mob_profiles.logbooks.df[mob_profiles.logbooks.df["id_journey"].isin([1, 4])].copy()
+    update_df = mob_profiles.logbooks.df[
+        mob_profiles.logbooks.df["id_journey"].isin([1, 4])
+    ].copy()
     update_df.loc[:, "distance"] = 20.0
     mob_profiles.logbooks.update_journeys(input_df=update_df)
-    assert (mob_profiles.logbooks.df.set_index("id_journey").loc[[1, 4], "distance"] == 20.0).all()
+    assert (
+        mob_profiles.logbooks.df.set_index("id_journey").loc[[1, 4], "distance"] == 20.0
+    ).all()
 
 
 def test_temp_res(mob_profiles2):
@@ -70,7 +79,12 @@ def test_update_cluster_labels(mob_profiles3):
     clusters_df = mob_profiles3.clusters.df
     clusters_df.loc[clusters_df["id_cluster"] == 1, "label"] = "Cluster_A"
     mob_profiles3.clusters.update_clusters(input_df=clusters_df)
-    assert (mob_profiles3.clusters.df.loc[mob_profiles3.clusters.df["id_cluster"] == 1, "label"] == "Cluster_A").all()
+    assert (
+        mob_profiles3.clusters.df.loc[
+            mob_profiles3.clusters.df["id_cluster"] == 1, "label"
+        ]
+        == "Cluster_A"
+    ).all()
 
 
 def test_update_location_labels(mob_profiles1):
@@ -84,7 +98,10 @@ def test_mobdata_extended(mob_profiles2):
     assert hasattr(mob_profiles_extended, "df")
     assert not mob_profiles_extended.df.empty
     # difference between end_dt start_dt of each row should be <= 1 day
-    assert (mob_profiles_extended.df["end_dt"] - mob_profiles_extended.df["start_dt"] <= pd.Timedelta(days=1)).all()
+    assert (
+        mob_profiles_extended.df["end_dt"] - mob_profiles_extended.df["start_dt"]
+        <= pd.Timedelta(days=1)
+    ).all()
 
 
 def test_mobdata_extended_withoutsplitting(mob_profiles2):

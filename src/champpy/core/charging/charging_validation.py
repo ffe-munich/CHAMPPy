@@ -26,19 +26,19 @@ class UserParamsChargingPlotter:
 
     filename: str = "plots\\charging_plots.html"
     """Output filename for the generated HTML plots."""
-    
+
     font_family: str = "Segoe UI"
     """Font family for plot text."""
-    
+
     save_plot: bool = True
     """Option to control whether plots are saved to file."""
-    
+
     show: bool = True
     """Option to control whether plots are displayed in browser."""
-    
+
     font_size: int = 18
     """Font size for plot text."""
-    
+
     rgb_color: Optional[list] = field(
         default_factory=lambda: [
             [0.2078, 0.4235, 0.6471],
@@ -51,10 +51,10 @@ class UserParamsChargingPlotter:
         ]
     )
     """RGB color matrix for plotting clusters. Each inner list contains RGB values (0-1 range)."""
-    
+
     load_temp_res: Optional[int] = 1
     """Temporal resolution in hours, only relevant for load profile plot."""
-    
+
     clustering: Optional[bool] = False
     """Option to control whether plots are created for clusters (if defined in the data)."""
 
@@ -72,7 +72,10 @@ class ChargingPlotter:
         Plot configuration such as output filename, font, colors, and display/export behavior.
     """
 
-    def __init__(self, user_params: Optional[UserParamsChargingPlotter] = UserParamsChargingPlotter()):
+    def __init__(
+        self,
+        user_params: Optional[UserParamsChargingPlotter] = UserParamsChargingPlotter(),
+    ):
         # Unpack user parameters
         self._filename = user_params.filename
         self._rgb_color = user_params.rgb_color
@@ -125,7 +128,9 @@ class ChargingPlotter:
 
         # Debug output
         logger.debug(f"Output filename: {self._filename}")
-        logger.debug(f"Output path (before): {output_path}, is_absolute: {output_path.is_absolute()}")
+        logger.debug(
+            f"Output path (before): {output_path}, is_absolute: {output_path.is_absolute()}"
+        )
 
         # If path is relative, resolve based on configuration
         if not output_path.is_absolute():
@@ -143,13 +148,19 @@ class ChargingPlotter:
 
             with open(output_file, "w", encoding="utf-8") as f:
                 f.write("<html><head><title>CHAMPPy Charging plots</title>")
-                f.write(f"<style>body {{ font-family: {self._font_family}; margin: 0; padding: 20px; }} ")
+                f.write(
+                    f"<style>body {{ font-family: {self._font_family}; margin: 0; padding: 20px; }} "
+                )
                 f.write(".header { display: flex; align-items: center; gap: 1050px; } ")
                 f.write(".logo { height: 50px; width: auto; }</style></head><body>\n")
                 f.write('<div class="header"><h1>CHAMPPy charging plots</h1>')
-                f.write(f'<img src="{logo_data_uri}" class="logo" alt="FfE Logo"></div>\n')
+                f.write(
+                    f'<img src="{logo_data_uri}" class="logo" alt="FfE Logo"></div>\n'
+                )
                 f.write("<h2>📊 Charging characteristics</h2>")
-                f.write(fig_charging_char.to_html(full_html=False, include_plotlyjs="cdn"))
+                f.write(
+                    fig_charging_char.to_html(full_html=False, include_plotlyjs="cdn")
+                )
                 f.write("<h2>📈 Total load profile of the fleet over the week</h2>\n")
                 f.write(fig_load_week.to_html(full_html=False, include_plotlyjs=False))
                 f.write("</body></html>")
@@ -178,7 +189,10 @@ class ChargingPlotter:
         logger.info("Create plot of charging characteristics")
 
         # Cluster-Handling analog zu plot_mob_char
-        if self._clustering and len(charging_profiles.vehicles.df.id_cluster.unique()) > 1:
+        if (
+            self._clustering
+            and len(charging_profiles.vehicles.df.id_cluster.unique()) > 1
+        ):
             clusters = charging_profiles.clusters.df["id_cluster"].tolist()
             labels_clusters = charging_profiles.clusters.df["label"].tolist()
             n_clusters = len(clusters)
@@ -188,14 +202,22 @@ class ChargingPlotter:
             n_clusters = 1
 
         char_df_week_weekend = ChargingCharacteristics(
-            charging_profiles, method="mean", typedays=TypeDays(groups=[[0, 1, 2, 3, 4], [5, 6]]), clustering=self._clustering
+            charging_profiles,
+            method="mean",
+            typedays=TypeDays(groups=[[0, 1, 2, 3, 4], [5, 6]]),
+            clustering=self._clustering,
         ).df
         char_df_week = ChargingCharacteristics(
-            charging_profiles, method="mean", typedays=TypeDays(groups=[[0, 1, 2, 3, 4, 5, 6]]), clustering=self._clustering
+            charging_profiles,
+            method="mean",
+            typedays=TypeDays(groups=[[0, 1, 2, 3, 4, 5, 6]]),
+            clustering=self._clustering,
         ).df
 
         # Append mobility characteristics of week and weekend to one dataframe
-        charge_char_df = pd.concat([char_df_week_weekend, char_df_week], ignore_index=True)
+        charge_char_df = pd.concat(
+            [char_df_week_weekend, char_df_week], ignore_index=True
+        )
 
         # Extract data for plotting
         typedays = ["Mon-Fri", "Sat-Sun", "Mon-Sun"]
@@ -220,13 +242,17 @@ class ChargingPlotter:
         n_rows = (n_subplots - 1) // n_cols + 1
 
         # Create subplot
-        fig = subplots.make_subplots(rows=n_rows, cols=n_cols, horizontal_spacing=0.15, vertical_spacing=0.2)
+        fig = subplots.make_subplots(
+            rows=n_rows, cols=n_cols, horizontal_spacing=0.15, vertical_spacing=0.2
+        )
 
         # Plot for each cluster
         for idx_cluster, cluster in enumerate(clusters):
             # Filter data for the current cluster and type of days
             cluster_data = (
-                charge_char_df[charge_char_df["id_cluster"] == cluster] if self._clustering else charge_char_df
+                charge_char_df[charge_char_df["id_cluster"] == cluster]
+                if self._clustering
+                else charge_char_df
             )
             # select color for the cluster
             cluster_color = f"rgb({self._rgb_color[idx_cluster][0] * 255},{self._rgb_color[idx_cluster][1] * 255},{self._rgb_color[idx_cluster][2] * 255})"
@@ -261,7 +287,9 @@ class ChargingPlotter:
         for idx_metrix, metric in enumerate(metrics):
             row_index = idx_metrix // n_cols + 1
             col_index = idx_metrix % n_cols + 1
-            fig.update_xaxes(title_text=metrics_labels[idx_metrix], row=row_index, col=col_index)
+            fig.update_xaxes(
+                title_text=metrics_labels[idx_metrix], row=row_index, col=col_index
+            )
 
         fig.update_layout(
             showlegend=True,
@@ -326,15 +354,24 @@ class ChargingPlotter:
         """
         # Unpack charging data
         logger.info("Create plot of load profile over the course of a week")
-        charge_df = charging_profiles.charging_timeseries.df.loc[:, ["id_vehicle", "datetime", "power_charging_kw"]]
+        charge_df = charging_profiles.charging_timeseries.df.loc[
+            :, ["id_vehicle", "datetime", "power_charging_kw"]
+        ]
 
         # add week index
-        charge_df["week_index"] = get_week_index(charge_df["datetime"], temp_res=self._temp_res)
+        charge_df["week_index"] = get_week_index(
+            charge_df["datetime"], temp_res=self._temp_res
+        )
 
-        if self._clustering and len(charging_profiles.vehicles.df.id_cluster.unique()) > 1:
+        if (
+            self._clustering
+            and len(charging_profiles.vehicles.df.id_cluster.unique()) > 1
+        ):
             # Merge the cluster labels into the charge_df based on id_vehicle
             charge_df = charge_df.merge(
-                charging_profiles.vehicles.df[["id_vehicle", "id_cluster"]], on="id_vehicle", how="left"
+                charging_profiles.vehicles.df[["id_vehicle", "id_cluster"]],
+                on="id_vehicle",
+                how="left",
             )
             unique_id_cluster = charge_df["id_cluster"].unique()
             cluster_labels = charging_profiles.clusters.df["label"].tolist()
@@ -345,10 +382,18 @@ class ChargingPlotter:
             cluster_labels = [None]
 
         # Aggregate charging power for each timestamp, week index, and cluster
-        charge_df = charge_df.groupby(["datetime", "week_index", "id_cluster"])["power_charging_kw"].sum().reset_index()
+        charge_df = (
+            charge_df.groupby(["datetime", "week_index", "id_cluster"])[
+                "power_charging_kw"
+            ]
+            .sum()
+            .reset_index()
+        )
 
         # Aggregate load profile by week index and cluster
-        load_group = charge_df.groupby(["week_index", "id_cluster"])["power_charging_kw"]
+        load_group = charge_df.groupby(["week_index", "id_cluster"])[
+            "power_charging_kw"
+        ]
         load_min = load_group.min().reset_index()
         load_max = load_group.max().reset_index()
         load_profile_mean = load_group.mean().reset_index()
@@ -359,7 +404,9 @@ class ChargingPlotter:
         index_week = list(range(max_week_index + 1))
         n_timesteps_day = int(24 / self._temp_res)
         x_ticks = index_week[::n_timesteps_day]
-        label_positions = [tick + n_timesteps_day // 2 for tick in x_ticks]  # Midpoints between ticks
+        label_positions = [
+            tick + n_timesteps_day // 2 for tick in x_ticks
+        ]  # Midpoints between ticks
         weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
         max_value = load_max["power_charging_kw"].max()
 
@@ -377,11 +424,14 @@ class ChargingPlotter:
             shared_xaxes=True,
             vertical_spacing=vertical_spacing,
             subplot_titles=[
-                "" if cluster_labels[idx] is None else f"{cluster_labels[idx]}" for idx in range(len(unique_id_cluster))
+                "" if cluster_labels[idx] is None else f"{cluster_labels[idx]}"
+                for idx in range(len(unique_id_cluster))
             ],
         )
 
-        fig.update_annotations(font=dict(size=self._font_size + 5, family=self._font_family))
+        fig.update_annotations(
+            font=dict(size=self._font_size + 5, family=self._font_family)
+        )
 
         for idx_cluster, cluster in enumerate(unique_id_cluster):
             row_idx = idx_cluster + 1
@@ -467,7 +517,10 @@ class ChargingPlotter:
                 text="Time of week",
                 standoff=35,  # Abstand zwischen Titel und Achse
             ),
-            range=[0, max_week_index],  # Set x-axis range from 0 to 168 (7 days * 24 hours)
+            range=[
+                0,
+                max_week_index,
+            ],  # Set x-axis range from 0 to 168 (7 days * 24 hours)
             showticklabels=False,
             ticks="outside",
             zeroline=False,  # Ensure a line at y=0
@@ -545,7 +598,9 @@ class ChargingCharacteristics:
         clustering: Optional[bool] = False,
     ):
         """Initialize the ChargingCharacteristics class and calculate the characteristics based on the charging data."""
-        self.df = self._calc_charge_char(charging_profiles, typedays, grouping, method, clustering)
+        self.df = self._calc_charge_char(
+            charging_profiles, typedays, grouping, method, clustering
+        )
 
     @staticmethod
     def _calc_charge_char(
@@ -558,22 +613,34 @@ class ChargingCharacteristics:
         # Prepare data once
         charge_df = charging_profiles.charging_timeseries.df.copy()
         charge_df["weekday"] = charge_df["datetime"].dt.dayofweek
-        charge_df["index_typeday"] = charge_df["weekday"].apply(typedays.weekday2typeday)
+        charge_df["index_typeday"] = charge_df["weekday"].apply(
+            typedays.weekday2typeday
+        )
         charge_df["date"] = charge_df["datetime"].dt.normalize()
 
         if clustering:
             charge_df = charge_df.merge(
-                charging_profiles.vehicles.df[["id_vehicle", "id_cluster"]], on="id_vehicle", how="left"
+                charging_profiles.vehicles.df[["id_vehicle", "id_cluster"]],
+                on="id_vehicle",
+                how="left",
             )
-            unique_id_cluster = sorted(charging_profiles.clusters.df["id_cluster"].unique())
+            unique_id_cluster = sorted(
+                charging_profiles.clusters.df["id_cluster"].unique()
+            )
         else:
             charge_df["id_cluster"] = 1
             unique_id_cluster = [1]
 
-        temp_res = (charge_df.loc[1, "datetime"] - charge_df.loc[0, "datetime"]).total_seconds() / 3600
+        temp_res = (
+            charge_df.loc[1, "datetime"] - charge_df.loc[0, "datetime"]
+        ).total_seconds() / 3600
 
         # Map method
-        method_map = {"mean": pd.Series.mean, "min": pd.Series.min, "max": pd.Series.max}
+        method_map = {
+            "mean": pd.Series.mean,
+            "min": pd.Series.min,
+            "max": pd.Series.max,
+        }
         pd_method = method_map[method]
 
         charge_char = []
@@ -584,7 +651,9 @@ class ChargingCharacteristics:
                 typeday_label = typedays.names[index_typeday]
 
                 # Filter einmal
-                mask = (charge_df["index_typeday"] == index_typeday) & (charge_df["id_cluster"] == id_cluster)
+                mask = (charge_df["index_typeday"] == index_typeday) & (
+                    charge_df["id_cluster"] == id_cluster
+                )
                 charge_df_filtered = charge_df[mask]
 
                 if charge_df_filtered.empty:
@@ -619,15 +688,19 @@ class ChargingCharacteristics:
 
                 # Simultaneity factor - vektorisiert
                 n_vehicles = charge_df_filtered["id_vehicle"].nunique()
-                simultaneous_charging = charge_df_filtered.groupby("datetime")["power_charging_kw"].apply(
-                    lambda x: (x > 0).sum()
+                simultaneous_charging = charge_df_filtered.groupby("datetime")[
+                    "power_charging_kw"
+                ].apply(lambda x: (x > 0).sum())
+                simultaneous_factor = (
+                    simultaneous_charging / n_vehicles if n_vehicles > 0 else 0
                 )
-                simultaneous_factor = simultaneous_charging / n_vehicles if n_vehicles > 0 else 0
 
                 # Apply grouping mode
                 if grouping == "none":
                     result = {
-                        "daily_driving_consumption": pd_method(daily_driving_consumption),
+                        "daily_driving_consumption": pd_method(
+                            daily_driving_consumption
+                        ),
                         "daily_charging_hours": pd_method(daily_charging_hours),
                         "daily_charging_energy": pd_method(daily_charging_energy),
                         "daily_connected_hours": pd_method(daily_connected_hours),
@@ -645,25 +718,37 @@ class ChargingCharacteristics:
                     }
                 elif grouping == "vehicle":
                     result = {
-                        "daily_driving_consumption": daily_driving_consumption.groupby(level="id_vehicle")
+                        "daily_driving_consumption": daily_driving_consumption.groupby(
+                            level="id_vehicle"
+                        )
                         .agg(pd_method)
                         .tolist(),
-                        "daily_charging_hours": daily_charging_hours.groupby(level="id_vehicle")
+                        "daily_charging_hours": daily_charging_hours.groupby(
+                            level="id_vehicle"
+                        )
                         .agg(pd_method)
                         .tolist(),
-                        "daily_charging_energy": daily_charging_energy.groupby(level="id_vehicle")
+                        "daily_charging_energy": daily_charging_energy.groupby(
+                            level="id_vehicle"
+                        )
                         .agg(pd_method)
                         .tolist(),
-                        "daily_connected_hours": daily_connected_hours.groupby(level="id_vehicle")
+                        "daily_connected_hours": daily_connected_hours.groupby(
+                            level="id_vehicle"
+                        )
                         .agg(pd_method)
                         .tolist(),
-                        "daily_missing_energy": daily_missing_energy.groupby(level="id_vehicle")
+                        "daily_missing_energy": daily_missing_energy.groupby(
+                            level="id_vehicle"
+                        )
                         .agg(pd_method)
                         .tolist(),
                         "simultaneous_factor": [simultaneous_factor.mean()],
                     }
 
-                charge_char.append({"typeday": typeday_label, "id_cluster": id_cluster, **result})
+                charge_char.append(
+                    {"typeday": typeday_label, "id_cluster": id_cluster, **result}
+                )
 
         df_mob_char = pd.DataFrame(charge_char)
         if not clustering:

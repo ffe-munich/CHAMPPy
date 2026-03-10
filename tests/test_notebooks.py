@@ -44,7 +44,9 @@ def run_notebook_with_nbconvert(notebook_path):
         )
 
         if result.returncode != 0:
-            raise RuntimeError(f"Notebook execution failed:\n{result.stdout}\n{result.stderr}")
+            raise RuntimeError(
+                f"Notebook execution failed:\n{result.stdout}\n{result.stderr}"
+            )
 
     except subprocess.TimeoutExpired:
         raise RuntimeError(f"Notebook execution timed out: {notebook_path}")

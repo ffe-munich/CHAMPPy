@@ -21,7 +21,9 @@ def test_get_day_index_single_timestamp():
 
 
 def test_get_day_index_series():
-    dt_series = pd.Series([pd.Timestamp("2026-01-21 10:00:00"), pd.Timestamp("2026-01-21 15:30:00")])
+    dt_series = pd.Series(
+        [pd.Timestamp("2026-01-21 10:00:00"), pd.Timestamp("2026-01-21 15:30:00")]
+    )
     index_series = get_day_index(dt=dt_series, temp_res=0.25)
     assert isinstance(index_series, pd.Series)
     assert len(index_series) == 2

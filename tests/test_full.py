@@ -4,7 +4,10 @@ import pytest
 import copy
 import pandas as pd
 from champpy.core.mobility.mobility_cleaning import MobDataCleaner
-from champpy.core.mobility.parameterization import Parameterizer, UserParamsParameterizer
+from champpy.core.mobility.parameterization import (
+    Parameterizer,
+    UserParamsParameterizer,
+)
 from champpy.core.mobility.mobility_model import MobModel, UserParamsMobModel
 from champpy.core.mobility.mobility_validation import MobPlotter, UserParamsMobPlotter
 

@@ -100,7 +100,10 @@ def get_week_index(dt: pd.Timestamp | pd.Series | str, temp_res: float) -> pd.Se
 
 
 def get_datetime_array(
-    start_date: pd.Timestamp, end_date: pd.Timestamp, temp_res: float, number_days_buffer: int = 0
+    start_date: pd.Timestamp,
+    end_date: pd.Timestamp,
+    temp_res: float,
+    number_days_buffer: int = 0,
 ) -> tuple[pd.DatetimeIndex, pd.Series]:
     """
     Create a datetime array with buffer days before and after the actual period.
@@ -114,7 +117,9 @@ def get_datetime_array(
     """
     start_dt_wo_buffer = start_date.normalize()
     start_dt = start_dt_wo_buffer - pd.Timedelta(days=number_days_buffer)
-    end_dt_wo_buffer = end_date.normalize() + pd.Timedelta(days=1) - pd.Timedelta(hours=temp_res)
+    end_dt_wo_buffer = (
+        end_date.normalize() + pd.Timedelta(days=1) - pd.Timedelta(hours=temp_res)
+    )
     end_dt = end_dt_wo_buffer + pd.Timedelta(days=number_days_buffer)
     frequency = f"{temp_res}h"
     dt_array = pd.date_range(start=start_dt, end=end_dt, freq=frequency)
@@ -134,7 +139,7 @@ class TypeDays:
     groups : list[list[int]], optional
         List of weekday groups. Each inner list defines one typeday and contains
         weekday indices (``0=Monday`` ... ``6=Sunday``).
-    
+
     Attributes
     ----------
     groups : list[list[int]]
@@ -160,6 +165,7 @@ class TypeDays:
     >>> TypeDays(groups=[[0, 2, 4], [1, 3, 5, 6]]).names
     ['Mon-Fri', 'Tue-Sun']
     """
+
     def __init__(self, groups: list[list[int]] = [[0], [1], [2], [3], [4], [5], [6]]):
         """
         See Class docstring for parameters and example.
@@ -210,7 +216,9 @@ class TypeDays:
             logger.error(mssg)
             raise ValueError(mssg)
 
-    def weekday2typeday(self, index_weekday: int | pd.Series | np.ndarray) -> int | np.ndarray:
+    def weekday2typeday(
+        self, index_weekday: int | pd.Series | np.ndarray
+    ) -> int | np.ndarray:
         """
         Convert weekday (0=Monday,..6=Sunday) to typeday index based on groups.
 

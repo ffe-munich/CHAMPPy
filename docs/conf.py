@@ -6,10 +6,10 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = 'ChAMPPy'
-copyright = '2026, Florian Biedenbach'
-author = 'Florian Biedenbach'
-release = '1.0.0'
+project = "ChAMPPy"
+copyright = "2026, Florian Biedenbach"
+author = "Florian Biedenbach"
+release = "1.0.0"
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
@@ -20,7 +20,7 @@ import shutil
 from pathlib import Path
 
 sys.path.insert(0, os.path.abspath("../"))
-#sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
+# sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
 extensions = [
     "sphinx.ext.autodoc",
@@ -34,10 +34,10 @@ extensions = [
 ]
 
 autodoc_default_options = {
-    'members': True,
-    'member-order': 'groupwise',  # Group by type: attributes/properties first, then methods
-    'undoc-members': False,
-    'private-members': False,
+    "members": True,
+    "member-order": "groupwise",  # Group by type: attributes/properties first, then methods
+    "undoc-members": False,
+    "private-members": False,
 }
 
 # Napoleon settings for better docstring rendering
@@ -49,31 +49,31 @@ napoleon_google_docstring = False
 autosummary_generate = False
 
 intersphinx_mapping = {
-    'python': ('https://docs.python.org/3', None),
-    'pandas': ('https://pandas.pydata.org/docs/', None),
-    'numpy': ('https://numpy.org/doc/stable/', None),
+    "python": ("https://docs.python.org/3", None),
+    "pandas": ("https://pandas.pydata.org/docs/", None),
+    "numpy": ("https://numpy.org/doc/stable/", None),
 }
 
-templates_path = ['_templates']
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
+templates_path = ["_templates"]
+exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
 # MyST-NB configuration
 nb_execution_mode = "off"  # Don't execute notebooks during build
 
 # Suppress warnings for README notebook links
-suppress_warnings = ['myst.xref_missing']
+suppress_warnings = ["myst.xref_missing"]
 
-language = '[en]'
+language = "[en]"
 
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
-html_theme = 'furo'
-html_static_path = ['_static']
+html_theme = "furo"
+html_static_path = ["_static"]
 html_theme_options = {
     "navigation_with_keys": True,
 }
-html_css_files = ['custom.css']
+html_css_files = ["custom.css"]
 
 
 def sync_notebooks_from_repo(app):
@@ -88,7 +88,8 @@ def sync_notebooks_from_repo(app):
     os.makedirs(dst_dir, exist_ok=True)
 
     src_files = {
-        f for f in os.listdir(src_dir)
+        f
+        for f in os.listdir(src_dir)
         if f.endswith(".ipynb") and (f.startswith("01_demo") or f.startswith("02_demo"))
     }
     dst_files = {f for f in os.listdir(dst_dir) if f.endswith(".ipynb")}
@@ -119,7 +120,9 @@ def copy_static_to_docs_path(app, exception):
         repo_root = os.path.dirname(app.srcdir)
         svg_src = os.path.join(repo_root, "data", "graphical_abstract.svg")
         if os.path.exists(svg_src):
-            shutil.copy2(svg_src, os.path.join(app.outdir, "_static", "graphical_abstract.svg"))
+            shutil.copy2(
+                svg_src, os.path.join(app.outdir, "_static", "graphical_abstract.svg")
+            )
             shutil.copy2(svg_src, os.path.join(dst, "graphical_abstract.svg"))
 
 

@@ -33,7 +33,9 @@ class BaseMobilityComponent(ABC):
         """Ensure subclasses define a _schema attribute."""
         super().__init_subclass__()
         if getattr(cls, "_schema", None) is None:
-            raise NotImplementedError(f"{cls.__name__} must define a class attribute '_schema'")
+            raise NotImplementedError(
+                f"{cls.__name__} must define a class attribute '_schema'"
+            )
 
     @property
     def df(self) -> pd.DataFrame:
@@ -74,7 +76,11 @@ class BaseMobilityComponent(ABC):
         self._df = self._schema.validate(new_df)
 
     def _update_rows_of_df(
-        self, input_df: pd.DataFrame, index_cols: list[str], user_setter: bool = True, prefer_input: bool = False
+        self,
+        input_df: pd.DataFrame,
+        index_cols: list[str],
+        user_setter: bool = True,
+        prefer_input: bool = False,
     ) -> None:
         """Update rows in the DataFrame based on index columns.
         Parameters:
@@ -115,7 +121,9 @@ class BaseMobilityComponent(ABC):
 
     def _check_frozen(self):
         if self._frozen:
-            raise AttributeError(f"This {self.__class__.__name__} instance is frozen and cannot be modified.")
+            raise AttributeError(
+                f"This {self.__class__.__name__} instance is frozen and cannot be modified."
+            )
 
 
 class LogbooksSchema(pa.DataFrameModel):
@@ -136,7 +144,8 @@ class LogbooksSchema(pa.DataFrameModel):
 
     # check that dep_dt is before arr_dt
     @pa.dataframe_check(
-        error="Departure time (dep_dt) must be before arrival time (arr_dt) for all journeys.", groupby=None
+        error="Departure time (dep_dt) must be before arrival time (arr_dt) for all journeys.",
+        groupby=None,
     )
     def check_time_order(cls, df: pd.DataFrame) -> Series[bool]:
         """Ensure dep_dt is before arr_dt for all journeys."""
@@ -144,7 +153,8 @@ class LogbooksSchema(pa.DataFrameModel):
 
     # check no overlapping journeys per vehicle
     @pa.dataframe_check(
-        error="Journeys for the same vehicle cannot overlap. dep_dt must be >= previous arr_dt.", groupby=None
+        error="Journeys for the same vehicle cannot overlap. dep_dt must be >= previous arr_dt.",
+        groupby=None,
     )
     def check_no_overlapping_journeys(cls, df: pd.DataFrame) -> Series[bool]:
         """Check for no overlapping journeys per vehicle."""
@@ -166,7 +176,7 @@ class Logbooks(BaseMobilityComponent):
     The Logbooks class represents the logbook data of journeys, including departure and arrival times, locations, and distances.
     The class holding a dataframe df that contains the data.
     It is included as a component in the :class:`MobProfiles` class and can be accessed via its instances.
-    It provides methods to add, update, and delete journeys, as well as to restore location continuity and convert temporal resolution. 
+    It provides methods to add, update, and delete journeys, as well as to restore location continuity and convert temporal resolution.
     The Logbooks class ensures data integrity through validation with a Pandera schema.
 
     The DataFrame (accessible via :attr:`~champpy.Logbooks.df`) contains the following columns:
@@ -215,9 +225,9 @@ class Logbooks(BaseMobilityComponent):
         Input DataFrame for the logbooks. Please see column description in :class:`Logbooks` for required columns and types.
         The column `id_journey` is optional and will be generated if not provided in the input DataFrame.
         The columns `duration` and `speed` are not required as they are calculated. They will be ignored if provided in the input DataFrame.
-                
+
     frozen : bool, optional
-        If True, the Logbooks instance is immutable after creation. Default is False.   
+        If True, the Logbooks instance is immutable after creation. Default is False.
     """
 
     _schema = LogbooksSchema  # Pandera schema for validation of the logbooks DataFrame
@@ -226,7 +236,7 @@ class Logbooks(BaseMobilityComponent):
         """
         Initialize a Logbooks object.
 
-        The parameters are described in the class docstring. 
+        The parameters are described in the class docstring.
         """
         self._event_on_locations = Event[self]()  # Event triggered on logbooks update
         super().__init__(input_df=input_df, frozen=frozen)  # call base constructor
@@ -247,7 +257,9 @@ class Logbooks(BaseMobilityComponent):
 
         # Sorted required logbook rows based on id_vehicle and dep_dt
         if {"id_vehicle", "dep_dt"}.issubset(input_df.columns):
-            input_df = input_df.sort_values(by=["id_vehicle", "dep_dt"]).reset_index(drop=True)
+            input_df = input_df.sort_values(by=["id_vehicle", "dep_dt"]).reset_index(
+                drop=True
+            )
 
         # Add id_journey if missing
         if "id_journey" not in input_df.columns:
@@ -257,20 +269,32 @@ class Logbooks(BaseMobilityComponent):
         LogbooksSchema.validate(input_df)
 
         # Sort columns to standard order
-        required_cols = ["id_journey", "id_vehicle", "dep_dt", "arr_dt", "dep_loc", "arr_loc", "distance"]
+        required_cols = [
+            "id_journey",
+            "id_vehicle",
+            "dep_dt",
+            "arr_dt",
+            "dep_loc",
+            "arr_loc",
+            "distance",
+        ]
         input_df = input_df[required_cols]
 
         return input_df
 
     def _on_df_getter(self, output_df) -> pd.DataFrame:
         """Add duration and speed columns to output_df for the getter."""
-        duration = (self._df["arr_dt"] - self._df["dep_dt"]).dt.total_seconds() / 3600  # in hours
+        duration = (
+            self._df["arr_dt"] - self._df["dep_dt"]
+        ).dt.total_seconds() / 3600  # in hours
         speed = self._df["distance"] / duration  # in km/h
         return output_df.assign(duration=duration, speed=speed)
 
     def _on_df_setter(self):
         """Call restore_location_continuity after setting new dataframe."""
-        self._df = self._df.sort_values(by=["id_vehicle", "dep_dt"]).reset_index(drop=True)
+        self._df = self._df.sort_values(by=["id_vehicle", "dep_dt"]).reset_index(
+            drop=True
+        )
         self.restore_location_continuity()
         # Triggger event to update location labels
         self._event_on_locations.trigger(self)
@@ -318,7 +342,9 @@ class Logbooks(BaseMobilityComponent):
         existing_df = pd.concat([existing_df, prepared_df], ignore_index=True)
 
         # Sort by id_vehicle and dep_dt
-        existing_df = existing_df.sort_values(by=["id_vehicle", "dep_dt"]).reset_index(drop=True)
+        existing_df = existing_df.sort_values(by=["id_vehicle", "dep_dt"]).reset_index(
+            drop=True
+        )
 
         # use setter for validation and hooks
         self.df = existing_df
@@ -351,7 +377,9 @@ class Logbooks(BaseMobilityComponent):
 
         """
         # Update journeys using base class method
-        self._update_rows_of_df(input_df, index_cols=["id_journey"], user_setter=True, prefer_input=False)
+        self._update_rows_of_df(
+            input_df, index_cols=["id_journey"], user_setter=True, prefer_input=False
+        )
 
     @validate_call
     def delete_journeys(self, id_journey: list) -> None:
@@ -392,7 +420,9 @@ class Logbooks(BaseMobilityComponent):
         self._del_rows_of_df(mask_delete)
 
     @validate_call
-    def restore_location_continuity(self, target: Literal["dep", "arr"] = "dep") -> None:
+    def restore_location_continuity(
+        self, target: Literal["dep", "arr"] = "dep"
+    ) -> None:
         """
         Restore location continuity by overwriting either dep_loc or arr_loc.
 
@@ -429,12 +459,12 @@ class Logbooks(BaseMobilityComponent):
         """
         Temporal resolution of the logbook in hours.
 
-        :getter: Returns the current temporal resolution of the logbook in hours. 
+        :getter: Returns the current temporal resolution of the logbook in hours.
                  If no temporal resolution has been set, returns None.
-        :setter: Set the temporal resolution of the logbook in hours. 
-                 This will convert the logbook to the specified temporal resolution 
+        :setter: Set the temporal resolution of the logbook in hours.
+                 This will convert the logbook to the specified temporal resolution
                  by merging overlapping/adjacent journeys per vehicle.
-        
+
         Examples
         --------
         This example uses the instance `mob_profiles` defined in the :class:`MobProfiles` examples:
@@ -443,11 +473,11 @@ class Logbooks(BaseMobilityComponent):
 
             # Get current temporal resolution (initially None)
             current_res = mob_profiles.logbooks.temp_res
-            
+
             # Set temporal resolution to 1 hour
             # This will merge journeys that overlap or are adjacent within 1-hour intervals
             mob_profiles.logbooks.temp_res = 1.0
-            
+
             # Check the new temporal resolution
             print(mob_profiles.logbooks.temp_res)  # Output: 1.0
         """
@@ -500,7 +530,17 @@ class Logbooks(BaseMobilityComponent):
 
         # If already aligned to resolution, return original (schema columns)
         if df["dep_dt"].equals(dep_floor) and df["arr_dt"].equals(arr_ceil):
-            return df[["id_journey", "id_vehicle", "dep_dt", "arr_dt", "dep_loc", "arr_loc", "distance"]]
+            return df[
+                [
+                    "id_journey",
+                    "id_vehicle",
+                    "dep_dt",
+                    "arr_dt",
+                    "dep_loc",
+                    "arr_loc",
+                    "distance",
+                ]
+            ]
 
         # Prepare rounded dataframe
         df["dep_dt_r"] = dep_floor
@@ -537,7 +577,9 @@ class VehiclesSchema(pa.DataFrameModel):
     first_day: pa.DateTime = pa.Field(coerce=True)
     last_day: pa.DateTime = pa.Field(coerce=True)
     id_cluster: int = pa.Field(ge=1, coerce=True, default=1)
-    first_loc: Series[pd.Int64Dtype] = pa.Field(ge=0, nullable=True, coerce=True, default=None)
+    first_loc: Series[pd.Int64Dtype] = pa.Field(
+        ge=0, nullable=True, coerce=True, default=None
+    )
 
     class Config:
         strict = "filter"  # remove extra columns
@@ -547,14 +589,18 @@ class VehiclesSchema(pa.DataFrameModel):
 
     # check that dep_dt is before arr_dt
     @pa.dataframe_check(
-        error="First day (first_day) must be before last day (last_day) for all vehicles.", groupby=None
+        error="First day (first_day) must be before last day (last_day) for all vehicles.",
+        groupby=None,
     )
     def check_time_order(cls, df: pd.DataFrame) -> Series[bool]:
         """Ensure first_day is before last_day for all vehicles."""
         return df["first_day"] <= df["last_day"]
 
     # check id_vehicle is unique
-    @pa.dataframe_check(error="id_vehicle must be unique. No duplicate vehicle IDs allowed.", groupby=None)
+    @pa.dataframe_check(
+        error="id_vehicle must be unique. No duplicate vehicle IDs allowed.",
+        groupby=None,
+    )
     def check_id_vehicle_unique(cls, df: pd.DataFrame) -> Series[bool]:
         """Ensure id_vehicle is unique across all rows."""
         return ~df["id_vehicle"].duplicated(keep=False)
@@ -586,13 +632,13 @@ class Vehicles(BaseMobilityComponent):
           - Last recorded day of the vehicle.
         * - id_cluster
           - :class:`int`
-          - Cluster assignment (optional, default: 1). 
+          - Cluster assignment (optional, default: 1).
             Used to group vehicles into different clusters.
         * - first_loc
           - :class:`int`
-          - First location of the vehicle (optional, default: None). 
+          - First location of the vehicle (optional, default: None).
             Use the same location encoding as in the logbooks.
-    
+
     Parameters
     ----------
     input_df : :class:`pandas.DataFrame`
@@ -630,7 +676,7 @@ class Vehicles(BaseMobilityComponent):
         Add vehicles from a DataFrame.
 
         Parameters
-        ----------  
+        ----------
         input_df : pd.DataFrame
                 DataFrame with vehicle data to add. See column description table in :class:`Vehicles` for required columns.
 
@@ -671,7 +717,7 @@ class Vehicles(BaseMobilityComponent):
         ----------
         input_df : pd.DataFrame
                 DataFrame with vehicle data to add. See column description table in :class:`Vehicles` for required columns.
-        
+
         Examples
         --------
         This example uses the instance `mob_profiles` defined in the :class:`MobProfiles` examples:
@@ -681,12 +727,14 @@ class Vehicles(BaseMobilityComponent):
             # Get dataframe of the second vehicle and set its cluster to 2
             updated_vehicles_df = mob_profiles.vehicles.df[mob_profiles.vehicles.df["id_vehicle"] == 2]
             updated_vehicles_df.loc[:, "id_cluster"] = 2
-            
+
             # Update vehicles from a DataFrame
             mob_profiles.vehicles.update_vehicles(input_df=updated_vehicles_df)
         """
         # Update vehicles using base class method
-        self._update_rows_of_df(input_df, index_cols=["id_vehicle"], user_setter=True, prefer_input=False)
+        self._update_rows_of_df(
+            input_df, index_cols=["id_vehicle"], user_setter=True, prefer_input=False
+        )
 
     def delete_vehicles(self, id_vehicle: list) -> None:
         """Delete vehicles by vehicle ID.
@@ -695,7 +743,7 @@ class Vehicles(BaseMobilityComponent):
         ----------
         id_vehicle : list[int]
                 List of vehicle IDs to delete.
-        
+
         Examples
         --------
         This example uses the instance `mob_profiles` defined in the :class:`MobProfiles` examples:
@@ -774,8 +822,15 @@ class Vehicles(BaseMobilityComponent):
             return
 
         # Get first dep_loc per vehicle
-        first_loc = logbooks_df.sort_values(by=["dep_dt"]).groupby("id_vehicle").first().reset_index()
-        first_loc = first_loc[["id_vehicle", "dep_loc"]].rename(columns={"dep_loc": "first_loc"})
+        first_loc = (
+            logbooks_df.sort_values(by=["dep_dt"])
+            .groupby("id_vehicle")
+            .first()
+            .reset_index()
+        )
+        first_loc = first_loc[["id_vehicle", "dep_loc"]].rename(
+            columns={"dep_loc": "first_loc"}
+        )
 
         # Remove existing first_loc column if present to avoid _x/_y suffix
         if "first_loc" in self._df.columns:
@@ -808,7 +863,7 @@ class Clusters(BaseMobilityComponent):
 
     The Clusters class manages cluster assignments for vehicles in the mobility data.
     It is included as a component in the :class:`MobProfiles` class and can be accessed via its instances.
-    The clusters DataFrame is automatically generated from the vehicles DataFrame 
+    The clusters DataFrame is automatically generated from the vehicles DataFrame
     and cannot be set directly, but can be updated via the update methods.
 
     The DataFrame (accessible via :attr:`~champpy.Clusters.df`) contains the following columns:
@@ -882,7 +937,9 @@ class Clusters(BaseMobilityComponent):
         update_df = pd.DataFrame({"id_cluster": cluster_ids, "label": cluster_labels})
 
         # Update clusters DataFrame using function of base class
-        self._update_rows_of_df(update_df, index_cols=["id_cluster"], user_setter=False, prefer_input=True)
+        self._update_rows_of_df(
+            update_df, index_cols=["id_cluster"], user_setter=False, prefer_input=True
+        )
 
     def update_clusters(self, input_df: pd.DataFrame) -> None:
         """
@@ -891,7 +948,7 @@ class Clusters(BaseMobilityComponent):
         Parameters
         ----------
         input_df : pd.DataFrame
-                DataFrame with cluster data to update. 
+                DataFrame with cluster data to update.
                 See column description table in :class:`Clusters` for required columns.
 
         Examples
@@ -902,15 +959,17 @@ class Clusters(BaseMobilityComponent):
 
             # Get current clusters DataFrame
             clusters_df = mob_profiles.clusters.df
-            
+
             # Update cluster labels
             clusters_df.loc[clusters_df["id_cluster"] == 1, "label"] = "Private Vehicles"
-            
+
             # Apply updated labels
             mob_profiles.clusters.update_clusters(clusters_df)
         """
         # Update clusters DataFrame using function of base class
-        self._update_rows_of_df(input_df, index_cols=["id_cluster"], user_setter=False, prefer_input=False)
+        self._update_rows_of_df(
+            input_df, index_cols=["id_cluster"], user_setter=False, prefer_input=False
+        )
 
 
 class LocationsSchema(pa.DataFrameModel):
@@ -953,20 +1012,29 @@ class Locations(BaseMobilityComponent):
         Logbooks instance to extract dep_loc and arr_loc values from.
     frozen : bool, optional
         If True, the Locations instance is immutable after creation. Default is False.
-    
+
 
     """
 
-    _schema = LocationsSchema  # Pandera schema for validation of the locations DataFrame
+    _schema = (
+        LocationsSchema  # Pandera schema for validation of the locations DataFrame
+    )
 
-    def __init__(self, vehicles: Vehicles | None = None, logbooks: Logbooks | None = None, frozen: bool = False):
+    def __init__(
+        self,
+        vehicles: Vehicles | None = None,
+        logbooks: Logbooks | None = None,
+        frozen: bool = False,
+    ):
         """
         Initialize a Locations object.
 
         The parameters are described in the class docstring.
         """
         super().__init__(input_df=None)  # call base constructor
-        self.update_locations_from_logbooks_vehicles(logbooks=logbooks, vehicles=vehicles)
+        self.update_locations_from_logbooks_vehicles(
+            logbooks=logbooks, vehicles=vehicles
+        )
         self._frozen = frozen
 
     @BaseMobilityComponent.df.setter
@@ -1020,12 +1088,19 @@ class Locations(BaseMobilityComponent):
         all_locs = sorted(set(all_locs))
 
         # Create new locations DataFrame
-        new_locations_df = pd.DataFrame({"location": all_locs, "label": [f"Location {loc}" for loc in all_locs]})
+        new_locations_df = pd.DataFrame(
+            {"location": all_locs, "label": [f"Location {loc}" for loc in all_locs]}
+        )
         # Update locations DataFrame: 0 = driving, 1 = home
         new_locations_df.loc[new_locations_df["location"] == 0, "label"] = "Driving"
         new_locations_df.loc[new_locations_df["location"] == 1, "label"] = "Home"
 
-        self._update_rows_of_df(new_locations_df, index_cols=["location"], user_setter=False, prefer_input=True)
+        self._update_rows_of_df(
+            new_locations_df,
+            index_cols=["location"],
+            user_setter=False,
+            prefer_input=True,
+        )
 
     def update_locations(self, input_df: pd.DataFrame) -> None:
         """
@@ -1044,11 +1119,13 @@ class Locations(BaseMobilityComponent):
 
             # Get current locations DataFrame
             locations_df = mob_profiles.locations.df
-            
+
             # Update location labels with meaningful names
             locations_df.loc[locations_df["location"] == 2, "label"] = "Work"
-            
+
             # Apply updated labels
             mob_profiles.locations.update_locations(locations_df)
         """
-        self._update_rows_of_df(input_df, index_cols=["location"], user_setter=False, prefer_input=False)
+        self._update_rows_of_df(
+            input_df, index_cols=["location"], user_setter=False, prefer_input=False
+        )

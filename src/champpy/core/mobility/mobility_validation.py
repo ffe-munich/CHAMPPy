@@ -58,7 +58,9 @@ class UserParamsMobPlotter:
     )
     """RGB color matrix used for cluster and area coloring."""
 
-    location_temp_res: Optional[int] = 1  # Temporal resolution in hours, only relevant for location profile plots
+    location_temp_res: Optional[int] = (
+        1  # Temporal resolution in hours, only relevant for location profile plots
+    )
     """Temporal resolution in hours for location profile plot."""
 
     location_order: Optional[list] = field(default_factory=lambda: [])
@@ -81,7 +83,9 @@ class MobPlotter:
         Plot configuration such as output filename, font, colors, and display/export behavior.
     """
 
-    def __init__(self, user_params: Optional[UserParamsMobPlotter] = UserParamsMobPlotter()):
+    def __init__(
+        self, user_params: Optional[UserParamsMobPlotter] = UserParamsMobPlotter()
+    ):
         # Define a global RGB color matrix
         self._filename = user_params.filename
         self._rgb_color = user_params.rgb_color
@@ -119,7 +123,9 @@ class MobPlotter:
         logger.info("Generate plot of mobility profiles")
 
         # Parse mob_profiles to ensure it is MobProfilesExtended
-        mob_profiles_ext = parse_mob_profiles(mob_profiles, splitdays=True, clustering=self._clustering)
+        mob_profiles_ext = parse_mob_profiles(
+            mob_profiles, splitdays=True, clustering=self._clustering
+        )
 
         # Disable individual plot showing
         cache_show = self._show
@@ -141,7 +147,9 @@ class MobPlotter:
 
         # Debug output
         logger.debug(f"Output filename: {self._filename}")
-        logger.debug(f"Output path (before): {output_path}, is_absolute: {output_path.is_absolute()}")
+        logger.debug(
+            f"Output path (before): {output_path}, is_absolute: {output_path.is_absolute()}"
+        )
 
         # If path is relative, resolve based on configuration
         if not output_path.is_absolute():
@@ -162,17 +170,25 @@ class MobPlotter:
 
             with open(output_file, "w", encoding="utf-8") as f:
                 f.write("<html><head><title>CHAMPPy Mobility plots</title>")
-                f.write(f"<style>body {{ font-family: {self._font_family}; margin: 0; padding: 20px; }} ")
+                f.write(
+                    f"<style>body {{ font-family: {self._font_family}; margin: 0; padding: 20px; }} "
+                )
                 f.write(".header { display: flex; align-items: center; gap: 1050px; } ")
                 f.write(".logo { height: 50px; width: auto; }</style></head><body>\n")
                 f.write('<div class="header"><h1>CHAMPPy mobility plots</h1>')
-                f.write(f'<img src="{logo_data_uri}" class="logo" alt="FfE Logo"></div>\n')
+                f.write(
+                    f'<img src="{logo_data_uri}" class="logo" alt="FfE Logo"></div>\n'
+                )
                 f.write("<h2>📊 Mobility characteristics</h2>")
                 f.write(fig_mob_char.to_html(full_html=False, include_plotlyjs="cdn"))
                 f.write("<h2>📈 Histogram of mobility characteristics</h2>\n")
                 f.write(fig_hist.to_html(full_html=False, include_plotlyjs=False))
                 f.write("<h2>📍 Location profile over the week</h2>\n")
-                f.write(fig_location_profile.to_html(full_html=False, include_plotlyjs=False))
+                f.write(
+                    fig_location_profile.to_html(
+                        full_html=False, include_plotlyjs=False
+                    )
+                )
                 f.write("</body></html>")
 
         # Restore the original show setting
@@ -182,7 +198,9 @@ class MobPlotter:
         if self._show:
             webbrowser.open(f"file://{output_file}")
 
-    def plot_mob_char(self, mob_profiles: MobProfiles | MobProfilesExtended) -> go.Figure:
+    def plot_mob_char(
+        self, mob_profiles: MobProfiles | MobProfilesExtended
+    ) -> go.Figure:
         """
         Plot the mobility characteristics: daily kilometrage, daily triptime, and number of trips per day.
 
@@ -198,7 +216,9 @@ class MobPlotter:
         """
         logger.info("Create plot of mobility characteristics")
         # Parse mob_profiles to ensure it is MobProfilesExtended
-        mob_profiles_ext = parse_mob_profiles(mob_profiles, splitdays=True, clustering=self._clustering)
+        mob_profiles_ext = parse_mob_profiles(
+            mob_profiles, splitdays=True, clustering=self._clustering
+        )
         self._store_locations_clusters(mob_profiles_ext)
 
         # Calculate mobility characteristics for the current cluster
@@ -218,12 +238,18 @@ class MobPlotter:
         ).df
 
         # Append mobility characteristics of week and weekend to one dataframe
-        mob_char_df = pd.concat([mob_char_df_week_weekdend, mob_char_df_week], ignore_index=True)
+        mob_char_df = pd.concat(
+            [mob_char_df_week_weekdend, mob_char_df_week], ignore_index=True
+        )
 
         # Define typedays and metrics for plotting
         typedays = ["Mon-Fri", "Sat-Sun", "Mon-Sun"]
         metrics = ["daily_kilometrage", "daily_journey_time", "number_journeys_per_day"]
-        name_metric = ["Daily kilometrage in km", "Daily journey time in h", "Number of journeys per day"]
+        name_metric = [
+            "Daily kilometrage in km",
+            "Daily journey time in h",
+            "Number of journeys per day",
+        ]
 
         # Create subplot
         fig = subplots.make_subplots(rows=1, cols=3, horizontal_spacing=0.15)
@@ -231,7 +257,11 @@ class MobPlotter:
         # Plot for each cluster
         for idx_cluster, cluster in enumerate(mob_profiles_ext.clusters):
             # Filter data for the current cluster and type of days
-            cluster_data = mob_char_df[mob_char_df["id_cluster"] == cluster] if self._clustering else mob_char_df
+            cluster_data = (
+                mob_char_df[mob_char_df["id_cluster"] == cluster]
+                if self._clustering
+                else mob_char_df
+            )
             # select color for the cluster
             cluster_color = f"rgb({self._rgb_color[idx_cluster][0] * 255},{self._rgb_color[idx_cluster][1] * 255},{self._rgb_color[idx_cluster][2] * 255})"
 
@@ -322,7 +352,9 @@ class MobPlotter:
             Plotly figure object.
         """
         logger.info("Create plot of mobility histograms")
-        mob_profiles_ext = parse_mob_profiles(mob_profiles, splitdays=False, clustering=self._clustering)
+        mob_profiles_ext = parse_mob_profiles(
+            mob_profiles, splitdays=False, clustering=self._clustering
+        )
         self._store_locations_clusters(mob_profiles_ext)
 
         # Get data per day
@@ -385,25 +417,71 @@ class MobPlotter:
 
         # create histograms per day
         fig = self._plot_sub_hist(
-            fig=fig, data=daily_mileage_per_day, row=1, col=1, string_xlabel="Daily kilometrage in km", step=20
-        )
-        fig = self._plot_sub_hist(fig=fig, data=triptime_per_day, row=1, col=2, string_xlabel="Daily journey time in h")
-        fig = self._plot_sub_hist(fig=fig, data=n_trips_per_day, row=1, col=3, string_xlabel="Number of journey")
-        fig = self._plot_sub_hist(
-            fig=fig, data=daily_mileage_per_vehicle, row=2, col=1, string_xlabel="Daily kilometrage in km", step=10
-        )
-        fig = self._plot_sub_hist(
-            fig=fig, data=triptime_per_vehicle, row=2, col=2, string_xlabel="Daily journey time in h"
-        )
-        fig = self._plot_sub_hist(fig=fig, data=n_trips_per_vehicle, row=2, col=3, string_xlabel="Number of journey")
-        fig = self._plot_sub_hist(
-            fig=fig, data=mileage_per_trip, row=3, col=1, string_xlabel="kilometrage per journey in km", step=20
+            fig=fig,
+            data=daily_mileage_per_day,
+            row=1,
+            col=1,
+            string_xlabel="Daily kilometrage in km",
+            step=20,
         )
         fig = self._plot_sub_hist(
-            fig=fig, data=duration_per_trip, row=3, col=2, string_xlabel="Duration per journey in h"
+            fig=fig,
+            data=triptime_per_day,
+            row=1,
+            col=2,
+            string_xlabel="Daily journey time in h",
         )
         fig = self._plot_sub_hist(
-            fig=fig, data=speed_per_trip, row=3, col=3, string_xlabel="Speed per journey in km/h", step=10
+            fig=fig,
+            data=n_trips_per_day,
+            row=1,
+            col=3,
+            string_xlabel="Number of journey",
+        )
+        fig = self._plot_sub_hist(
+            fig=fig,
+            data=daily_mileage_per_vehicle,
+            row=2,
+            col=1,
+            string_xlabel="Daily kilometrage in km",
+            step=10,
+        )
+        fig = self._plot_sub_hist(
+            fig=fig,
+            data=triptime_per_vehicle,
+            row=2,
+            col=2,
+            string_xlabel="Daily journey time in h",
+        )
+        fig = self._plot_sub_hist(
+            fig=fig,
+            data=n_trips_per_vehicle,
+            row=2,
+            col=3,
+            string_xlabel="Number of journey",
+        )
+        fig = self._plot_sub_hist(
+            fig=fig,
+            data=mileage_per_trip,
+            row=3,
+            col=1,
+            string_xlabel="kilometrage per journey in km",
+            step=20,
+        )
+        fig = self._plot_sub_hist(
+            fig=fig,
+            data=duration_per_trip,
+            row=3,
+            col=2,
+            string_xlabel="Duration per journey in h",
+        )
+        fig = self._plot_sub_hist(
+            fig=fig,
+            data=speed_per_trip,
+            row=3,
+            col=3,
+            string_xlabel="Speed per journey in km/h",
+            step=10,
         )
 
         # Update layout
@@ -471,7 +549,9 @@ class MobPlotter:
             # save maximum of hist
             max_y = max(hist) if max_y < max(hist) else max_y
             # Add a zero line at the beginning and end
-            extended_x = np.concatenate(([edges[0]], np.repeat(edges, 2)[1:-1], [edges[-1]]))
+            extended_x = np.concatenate(
+                ([edges[0]], np.repeat(edges, 2)[1:-1], [edges[-1]])
+            )
             extended_y = np.concatenate(([0], np.repeat(hist, 2), [0]))
 
             # plot stairs
@@ -488,7 +568,9 @@ class MobPlotter:
                         color=f"rgb({self._rgb_color[i][0] * 255},{self._rgb_color[i][1] * 255},{self._rgb_color[i][2] * 255})",
                         width=2,
                     ),
-                    showlegend=True if row == 1 and col == 1 else False,  # Show legend only for the first subplot
+                    showlegend=(
+                        True if row == 1 and col == 1 else False
+                    ),  # Show legend only for the first subplot
                     name=legends[i],  # Use legend_groups for the name
                 ),
                 row=row,
@@ -504,7 +586,10 @@ class MobPlotter:
             layer="above traces",
             title_font=dict(size=self._font_size),
             tickfont=dict(size=self._font_size),
-            range=[min_x - max_x * 0.05, max_x * 1.05],  # Set maximum and mimum with 10% margin
+            range=[
+                min_x - max_x * 0.05,
+                max_x * 1.05,
+            ],  # Set maximum and mimum with 10% margin
             row=row,
             col=col,
         )
@@ -524,7 +609,9 @@ class MobPlotter:
 
         return fig
 
-    def plot_location_profile_week(self, mob_profiles: MobProfiles | MobProfilesExtended) -> go.Figure:
+    def plot_location_profile_week(
+        self, mob_profiles: MobProfiles | MobProfilesExtended
+    ) -> go.Figure:
         """
         Create a plot showing the average presence of a vehicle fleet at different locations.
 
@@ -540,7 +627,9 @@ class MobPlotter:
         """
         logger.info("Create plot of location profile over the week")
         # Parse mob_profiles to ensure it is MobProfilesExtended
-        mob_profiles_ext = parse_mob_profiles(mob_profiles, splitdays=True, clustering=self._clustering)
+        mob_profiles_ext = parse_mob_profiles(
+            mob_profiles, splitdays=True, clustering=self._clustering
+        )
         mob_profiles_ext_df = mob_profiles_ext.df
 
         # Check clusters and legend of clusters
@@ -554,7 +643,13 @@ class MobPlotter:
             or len(self._location_order) == 0
             or len(self._location_order) != len(unique_locations)
         ):
-            self._location_order = [0] + list(unique_locations[(unique_locations != 0) & (unique_locations != 1)]) + [1]
+            self._location_order = (
+                [0]
+                + list(
+                    unique_locations[(unique_locations != 0) & (unique_locations != 1)]
+                )
+                + [1]
+            )
 
         # Set default labels
         if (
@@ -562,7 +657,9 @@ class MobPlotter:
             or len(self._location_labels) == 0
             or len(self._location_labels) != len(self._location_order)
         ):
-            self._location_labels = [f"Location = {str(loc)}" for loc in self._location_order]
+            self._location_labels = [
+                f"Location = {str(loc)}" for loc in self._location_order
+            ]
             index_home = self._location_order.index(1)
             index_driving = self._location_order.index(0)
             self._location_labels[index_home] = "Home"
@@ -578,12 +675,18 @@ class MobPlotter:
         # Extend array_share_week to include an additional dimension for clusters
         array_share_week = np.zeros((n_timesteps_week, n_locations, n_clusters))
 
-        mob_profiles_ext_df["start_index"] = get_week_index(mob_profiles_ext_df["start_dt"], temp_res)
-        mob_profiles_ext_df["end_index"] = get_week_index(mob_profiles_ext_df["end_dt"], temp_res)
+        mob_profiles_ext_df["start_index"] = get_week_index(
+            mob_profiles_ext_df["start_dt"], temp_res
+        )
+        mob_profiles_ext_df["end_index"] = get_week_index(
+            mob_profiles_ext_df["end_dt"], temp_res
+        )
 
         # Vektorisierte Berechnung der Aufenthaltsmatrix für alle Cluster und Locations
         for cluster_idx, cluster in enumerate(self._clusters):
-            cluster_data = mob_profiles_ext_df[mob_profiles_ext_df["id_cluster"] == cluster]
+            cluster_data = mob_profiles_ext_df[
+                mob_profiles_ext_df["id_cluster"] == cluster
+            ]
             starts = cluster_data["start_index"].values
             ends = cluster_data["end_index"].values - 1
             ends[ends < 0] = n_timesteps_week - 1
@@ -592,19 +695,29 @@ class MobPlotter:
             lengths = ends - starts + 1
             mask = lengths > 0
             if np.any(mask):
-                all_indices = np.concatenate([np.arange(s, e + 1) for s, e in zip(starts[mask], ends[mask])])
+                all_indices = np.concatenate(
+                    [np.arange(s, e + 1) for s, e in zip(starts[mask], ends[mask])]
+                )
                 all_locs = np.repeat(locs[mask], lengths[mask])
                 # Mapping location zu Index in location_order
-                loc_indices = np.array([self._location_order.index(loc) for loc in all_locs])
+                loc_indices = np.array(
+                    [self._location_order.index(loc) for loc in all_locs]
+                )
                 # Zähle Aufenthalte pro Zeitindex und Location
                 np.add.at(array_share_week, (all_indices, loc_indices, cluster_idx), 1)
 
         # Normalize the share at locations
-        self._array_share_week_norm = array_share_week / array_share_week.sum(axis=1, keepdims=True) * 100
+        self._array_share_week_norm = (
+            array_share_week / array_share_week.sum(axis=1, keepdims=True) * 100
+        )
 
         # Define x-ticks and labels for plotting
-        self._x_ticks = list(range(0, n_timesteps_week, n_timesteps_day))  # Every 24 hours
-        self._label_positions = [tick + n_timesteps_day // 2 for tick in self._x_ticks]  # Midpoints between ticks
+        self._x_ticks = list(
+            range(0, n_timesteps_week, n_timesteps_day)
+        )  # Every 24 hours
+        self._label_positions = [
+            tick + n_timesteps_day // 2 for tick in self._x_ticks
+        ]  # Midpoints between ticks
         self._weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
         # Create the plot
@@ -620,13 +733,18 @@ class MobPlotter:
     def _plot_location_profile_week_1cluster(self) -> go.Figure:
         # create dataframe for share at location
         n_timesteps_week = self._array_share_week_norm.shape[0]
-        df_share_loc = pd.DataFrame(self._array_share_week_norm[:, :, 0], columns=self._location_labels)
+        df_share_loc = pd.DataFrame(
+            self._array_share_week_norm[:, :, 0], columns=self._location_labels
+        )
 
         fig = px.area(
             df_share_loc,
             x=df_share_loc.index,
             y=df_share_loc.columns,
-            color_discrete_sequence=[f"rgba({r * 255},{g * 255},{b * 255},1.0)" for r, g, b in self._rgb_color],
+            color_discrete_sequence=[
+                f"rgba({r * 255},{g * 255},{b * 255},1.0)"
+                for r, g, b in self._rgb_color
+            ],
         )
 
         # Set explicit colors with full opacity to each trace
@@ -648,7 +766,10 @@ class MobPlotter:
                     text="Time of week",
                     standoff=35,  # Abstand zwischen Titel und Achse
                 ),
-                range=[0, n_timesteps_week],  # Set x-axis range from 0 to 168 (7 days * 24 hours)
+                range=[
+                    0,
+                    n_timesteps_week,
+                ],  # Set x-axis range from 0 to 168 (7 days * 24 hours)
                 showticklabels=False,
                 ticks="outside",
                 zeroline=True,  # Ensure a line at y=0
@@ -712,12 +833,16 @@ class MobPlotter:
             cols=1,
             shared_xaxes=True,
             vertical_spacing=0.22,
-            subplot_titles=[self._location_labels[i] for i in range(len(self._location_order))],
+            subplot_titles=[
+                self._location_labels[i] for i in range(len(self._location_order))
+            ],
         )
 
         # Update the formatting of subplot titles
         for i, annotation in enumerate(fig["layout"]["annotations"]):
-            annotation["font"] = dict(size=self._font_size + 5, color="black", family=self._font_family)
+            annotation["font"] = dict(
+                size=self._font_size + 5, color="black", family=self._font_family
+            )
             annotation["y"] += 0.012  # Adjust the y-position to move the title higher
 
         # Plot each location as a separate row
@@ -759,7 +884,10 @@ class MobPlotter:
                     text="Time of week",
                     standoff=35,  # Abstand zwischen Titel und Achse
                 ),
-                range=[0, n_timesteps_week],  # Set x-axis range from 0 to 168 (7 days * 24 hours)
+                range=[
+                    0,
+                    n_timesteps_week,
+                ],  # Set x-axis range from 0 to 168 (7 days * 24 hours)
                 showticklabels=False,
                 layer="above traces",
                 title_font=dict(size=self._font_size),
@@ -816,13 +944,27 @@ class MobPlotter:
             {
                 "Color": [f"Color {i + 1}" for i in range(len(self._rgb_color))],
                 "Value": [1] * len(self._rgb_color),
-                "RGB": [f"rgb({int(r * 255)},{int(g * 255)},{int(b * 255)})" for r, g, b in self._rgb_color],
+                "RGB": [
+                    f"rgb({int(r * 255)},{int(g * 255)},{int(b * 255)})"
+                    for r, g, b in self._rgb_color
+                ],
             }
         )
-        fig = px.bar(df, x="Color", y="Value", color="Color", color_discrete_sequence=df["RGB"], text="Color")
-        fig.update_traces(marker_line_color="black", marker_line_width=1, textposition="outside")
+        fig = px.bar(
+            df,
+            x="Color",
+            y="Value",
+            color="Color",
+            color_discrete_sequence=df["RGB"],
+            text="Color",
+        )
+        fig.update_traces(
+            marker_line_color="black", marker_line_width=1, textposition="outside"
+        )
         fig.update_layout(
-            yaxis=dict(showticklabels=False, showgrid=False, zeroline=False, visible=False),
+            yaxis=dict(
+                showticklabels=False, showgrid=False, zeroline=False, visible=False
+            ),
             xaxis=dict(showgrid=False, zeroline=False),
             showlegend=False,
             title="RGB Colors",
@@ -880,7 +1022,9 @@ class MobCharacteristics:
         mob_profiles_ext = parse_mob_profiles(mob_profiles, splitdays=splitdays)
 
         if calc_share_at_locations and method != "mean":
-            logger.warning('The variable <share_of_time_at_locations> can only be calculated for method = "mean".')
+            logger.warning(
+                'The variable <share_of_time_at_locations> can only be calculated for method = "mean".'
+            )
             calc_share_at_locations = False
 
         # Calculate mobility characteristics
@@ -907,11 +1051,17 @@ class MobCharacteristics:
         """
         # Prepare extended mob data dataframe
         mob_profiles_ext_df = mob_profiles_ext.df
-        mob_profiles_ext_df["weekday"] = mob_profiles_ext_df["start_dt"].dt.dayofweek  # Monday=0, Sunday=6
-        mob_profiles_ext_df["index_typeday"] = mob_profiles_ext_df["weekday"].apply(typedays.weekday2typeday)
+        mob_profiles_ext_df["weekday"] = mob_profiles_ext_df[
+            "start_dt"
+        ].dt.dayofweek  # Monday=0, Sunday=6
+        mob_profiles_ext_df["index_typeday"] = mob_profiles_ext_df["weekday"].apply(
+            typedays.weekday2typeday
+        )
         mob_profiles_ext_df["date"] = mob_profiles_ext_df["start_dt"].dt.normalize()
         # Add a new column 'duration_driving' where 'duration' is retained if 'location' is 0, otherwise 0
-        mob_profiles_ext_df["duration_driving"] = np.where(mob_profiles_ext_df["location"] == 0, mob_profiles_ext_df["duration"], 0)
+        mob_profiles_ext_df["duration_driving"] = np.where(
+            mob_profiles_ext_df["location"] == 0, mob_profiles_ext_df["duration"], 0
+        )
         if clustering:
             unique_id_cluster = mob_profiles_ext_df["id_cluster"].unique()
         else:
@@ -950,7 +1100,9 @@ class MobCharacteristics:
                 # grouping
                 if grouping == "none":
                     if calc_share_at_locations:
-                        share_at_locations, locations = self._calc_share_of_time_at_locations(mob_profiles_filtered)
+                        share_at_locations, locations = (
+                            self._calc_share_of_time_at_locations(mob_profiles_filtered)
+                        )
                     stat_daily_mileage = pd_method(daily_mileage)
                     stat_daily_triptime = pd_method(daily_triptime)
                     stat_n_trips = pd_method(daily_n_trips)
@@ -959,7 +1111,9 @@ class MobCharacteristics:
                 elif grouping == "day":
                     if calc_share_at_locations:
                         share_at_locations, locations = zip(
-                            *group.apply(lambda x: self._calc_share_of_time_at_locations(x))
+                            *group.apply(
+                                lambda x: self._calc_share_of_time_at_locations(x)
+                            )
                         )
                     stat_daily_mileage = daily_mileage
                     stat_daily_triptime = daily_triptime
@@ -969,12 +1123,22 @@ class MobCharacteristics:
                 elif grouping == "vehicle":
                     if calc_share_at_locations:
                         share_at_locations, locations = zip(
-                            *group_vehicles.apply(lambda x: self._calc_share_of_time_at_locations(x))
+                            *group_vehicles.apply(
+                                lambda x: self._calc_share_of_time_at_locations(x)
+                            )
                         )
-                    stat_daily_mileage = daily_mileage.groupby(level="id_vehicle").agg(pd_method)
-                    stat_daily_triptime = daily_triptime.groupby(level="id_vehicle").agg(pd_method)
-                    stat_n_trips = daily_n_trips.groupby(level="id_vehicle").agg(pd_method)
-                    share_days_with_trips = daily_log_trips.groupby(level="id_vehicle").agg(pd_method)
+                    stat_daily_mileage = daily_mileage.groupby(level="id_vehicle").agg(
+                        pd_method
+                    )
+                    stat_daily_triptime = daily_triptime.groupby(
+                        level="id_vehicle"
+                    ).agg(pd_method)
+                    stat_n_trips = daily_n_trips.groupby(level="id_vehicle").agg(
+                        pd_method
+                    )
+                    share_days_with_trips = daily_log_trips.groupby(
+                        level="id_vehicle"
+                    ).agg(pd_method)
 
                 # save results
                 mob_char.append(
@@ -986,7 +1150,9 @@ class MobCharacteristics:
                         "number_journeys_per_day": stat_n_trips.tolist(),
                         "share_days_with_journeys": share_days_with_trips.tolist(),
                         "locations": locations if calc_share_at_locations else None,
-                        "share_of_time_at_locations": share_at_locations if calc_share_at_locations else None,
+                        "share_of_time_at_locations": (
+                            share_at_locations if calc_share_at_locations else None
+                        ),
                     }
                 )
 
@@ -996,7 +1162,9 @@ class MobCharacteristics:
         return df_mob_char
 
     @staticmethod
-    def _calc_share_of_time_at_locations(mob_profiles_ext_df: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
+    def _calc_share_of_time_at_locations(
+        mob_profiles_ext_df: pd.DataFrame,
+    ) -> tuple[np.ndarray, np.ndarray]:
         """
         Calculate the share of time spent at each location.
 
@@ -1016,7 +1184,9 @@ class MobCharacteristics:
         total_hours = mob_profiles_ext_df.duration.sum()
 
         # group by location and sum duration
-        location_duration_df = mob_profiles_ext_df.groupby(["location"])["duration"].sum().reset_index()
+        location_duration_df = (
+            mob_profiles_ext_df.groupby(["location"])["duration"].sum().reset_index()
+        )
 
         location_duration_df.sort_values(by="location", inplace=True)
 
@@ -1028,7 +1198,9 @@ class MobCharacteristics:
 
 @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
 def parse_mob_profiles(
-    mob_profiles: MobProfiles | MobProfilesExtended, splitdays: Optional[bool] = False, clustering: Optional[bool] = False
+    mob_profiles: MobProfiles | MobProfilesExtended,
+    splitdays: Optional[bool] = False,
+    clustering: Optional[bool] = False,
 ) -> MobProfilesExtended:
     """
     Utility function to ensure the input mobility data is of type MobProfilesExtended.
@@ -1055,6 +1227,10 @@ def parse_mob_profiles(
     if isinstance(mob_profiles, MobProfilesExtended):
         return mob_profiles
     elif isinstance(mob_profiles, MobProfiles):
-        return MobProfilesExtended(mob_profiles, splitdays=splitdays, clustering=clustering)
+        return MobProfilesExtended(
+            mob_profiles, splitdays=splitdays, clustering=clustering
+        )
     else:
-        raise TypeError("mob_profiles must be an instance of MobProfiles or MobProfilesExtended.")
+        raise TypeError(
+            "mob_profiles must be an instance of MobProfiles or MobProfilesExtended."
+        )
