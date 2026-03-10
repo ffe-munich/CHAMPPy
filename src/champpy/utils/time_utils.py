@@ -124,11 +124,45 @@ def get_datetime_array(
 
 
 class TypeDays:
+    """
+    Utility class to group weekdays into typedays.
+
+    The class allows to define custom groups of weekdays (e.g., Mon-Fri, Sat-Sun) and provides methods to convert weekday indices to typeday indices.
+
+    Parameters
+    ----------
+    groups : list[list[int]], optional
+        List of weekday groups. Each inner list defines one typeday and contains
+        weekday indices (``0=Monday`` ... ``6=Sunday``).
+    
+    Attributes
+    ----------
+    groups : list[list[int]]
+        The defined groups of weekdays for each typeday.
+    index : list[int]
+        The index of each typeday (0-based).
+    names : list[str]
+        The names of each typeday based on the grouped weekdays (e.g., "Mon-Fri", "Sat-Sun").
+    number : int
+        The number of typedays defined.
+
+    Examples
+    --------
+    >>> typedays = TypeDays(groups=[[0, 1, 2, 3, 4], [5, 6]])
+    >>> typedays.index
+    [0, 1]
+    >>> typedays.names
+    ['Mon-Fri', 'Sat-Sun']
+
+    >>> TypeDays(groups=[[0, 1, 2, 3, 4], [5], [6]]).names
+    ['Mon-Fri', 'Sat', 'Sun']
+
+    >>> TypeDays(groups=[[0, 2, 4], [1, 3, 5, 6]]).names
+    ['Mon-Fri', 'Tue-Sun']
+    """
     def __init__(self, groups: list[list[int]] = [[0], [1], [2], [3], [4], [5], [6]]):
         """
-        groups: List of lists, each inner list contains weekdays (0=Monday,..6=Sunday) belonging to that typeday.
-        Example:
-            groups = [[1,2,3,4,5], [6,7]]  # 0=weekday, 1=weekend
+        See Class docstring for parameters and example.
         """
         # Validate groups
         self._validate_groups(groups)
@@ -180,8 +214,16 @@ class TypeDays:
         """
         Convert weekday (0=Monday,..6=Sunday) to typeday index based on groups.
 
-        Parameters:
-            index_weekday (int | pd.Series | np.ndarray): Weekday index or array/series of weekday indices.
+        Parameters
+        ----------
+        index_weekday : int | pandas.Series | numpy.ndarray
+            Weekday index or array/series of weekday indices.
+
+        Examples
+        --------
+        >>> typedays = TypeDays(groups=[[0, 1, 2, 3, 4], [5, 6]])
+        >>> typedays.weekday2typeday(np.array([0, 1, 2, 3, 4, 5, 6, 4, 6]))
+        [0, 0, 0, 0, 0, 1, 1, 0, 1]
         """
         if isinstance(index_weekday, int):
             # Single value

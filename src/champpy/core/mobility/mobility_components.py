@@ -37,7 +37,7 @@ class BaseMobilityComponent(ABC):
 
     @property
     def df(self) -> pd.DataFrame:
-        """Get the DataFrame of the mobility component."""
+        """Get a copy of the DataFrame of the data component. If the DataFrame is None, return an empty DataFrame with the correct schema."""
         if self._df is None:
             output_df = self._schema.example(size=0)
         else:
@@ -47,7 +47,7 @@ class BaseMobilityComponent(ABC):
 
     @df.setter
     def df(self, input_df: pd.DataFrame):
-        """Set the DataFrame of the mobility component with validation."""
+        """Set the DataFrame of the data component with validation."""
         self._check_frozen()
         self._df = self._prep_input_df(input_df)
         self._on_df_setter()  # Hook method for subclasses
@@ -110,7 +110,7 @@ class BaseMobilityComponent(ABC):
 
     @property
     def number(self) -> int:
-        """Return the number of entries in the DataFrame."""
+        """Return the number of entries in the DataFrame df."""
         return len(self._df) if self._df is not None else 0
 
     def _check_frozen(self):
@@ -161,7 +161,63 @@ class LogbooksSchema(pa.DataFrameModel):
 
 class Logbooks(BaseMobilityComponent):
     """
-    Class representing a logbook for vehicle journeys.
+    Component class included in :class:`MobProfiles` representing the logbooks with all journeys.
+
+    The Logbooks class represents the logbook data of journeys, including departure and arrival times, locations, and distances.
+    The class holding a dataframe df that contains the data.
+    It is included as a component in the :class:`MobProfiles` class and can be accessed via its instances.
+    It provides methods to add, update, and delete journeys, as well as to restore location continuity and convert temporal resolution. 
+    The Logbooks class ensures data integrity through validation with a Pandera schema.
+
+    The DataFrame (accessible via :attr:`~champpy.Logbooks.df`) contains the following columns:
+
+    .. list-table::
+       :header-rows: 1
+
+       * - Column
+         - Type
+         - Description
+       * - id_journey
+         - :class:`int`
+         - One-based index for journeys. This column is optional will be generated if not provided in the input DataFrame.
+       * - id_vehicle
+         - :class:`int`
+         - One-based index for vehicles, connected to id_vehicle in input_vehicles_df.
+       * - dep_dt
+         - :class:`pandas.Timestamp`
+         - Departure datetime of each journey.
+       * - arr_dt
+         - :class:`pandas.Timestamp`
+         - Arrival datetime of each journey.
+       * - dep_loc
+         - :class:`int`
+         - Departure location of each journey as integer above 0.
+           You can for example define 1 for home, 2 for work, etc.
+           The location = 0 is reserved for driving and not allowed in this dataframe.
+       * - arr_loc
+         - :class:`int`
+         - Arrival location of each journey as integer above 0.
+           You can for example define 1 for home, 2 for work, etc.
+           The location = 0 is reserved for driving and not allowed in this dataframe.
+       * - distance
+         - :class:`float`
+         - Distance of each journey in km.
+       * - duration
+         - :class:`float`
+         - Duration of each journey in hours.
+       * - speed
+         - :class:`float`
+         - Speed of each journey in km/h.
+
+    Parameters
+    ----------
+    input_df : :class:`pandas.DataFrame`
+        Input DataFrame for the logbooks. Please see column description in :class:`Logbooks` for required columns and types.
+        The column `id_journey` is optional and will be generated if not provided in the input DataFrame.
+        The columns `duration` and `speed` are not required as they are calculated. They will be ignored if provided in the input DataFrame.
+                
+    frozen : bool, optional
+        If True, the Logbooks instance is immutable after creation. Default is False.   
     """
 
     _schema = LogbooksSchema  # Pandera schema for validation of the logbooks DataFrame
@@ -170,20 +226,7 @@ class Logbooks(BaseMobilityComponent):
         """
         Initialize a Logbooks object.
 
-        Parameters
-        ----------
-        input_df : pd.DataFrame, optional
-                Initial DataFrame with journey data.
-                Expected columns and dtypes:
-                - id_journey: int
-                - id_vehicle: int
-                - dep_dt: datetime64[ns]
-                - arr_dt: datetime64[ns]
-                - dep_loc: str
-                - arr_loc: str
-                - distance: float
-        frozen : bool, optional
-                If True, the Logbooks instance is immutable after creation. Default is False.
+        The parameters are described in the class docstring. 
         """
         self._event_on_locations = Event[self]()  # Event triggered on logbooks update
         super().__init__(input_df=input_df, frozen=frozen)  # call base constructor
@@ -238,14 +281,29 @@ class Logbooks(BaseMobilityComponent):
 
         Parameters
         ----------
-        input_df : pd.DataFrame
-                DataFrame with journey data to add including columns:
-                - id_vehicle: int
-                - dep_dt: datetime64[ns]
-                - arr_dt: datetime64[ns]
-                - dep_loc: str
-                - arr_loc: str
-                - distance: float
+        input_df : pandas.DataFrame
+            DataFrame with journey data. Please see column description in :class:`Logbooks` for required columns and types.
+            The columns `duration` and `speed` are not required as they are calculated. They will be ignored if provided in the input DataFrame.
+
+        Examples
+        --------
+        This example uses the instance `mob_profiles` defined in the :class:`MobProfiles` examples:
+
+        .. code-block:: python
+
+            # Create new journeys DataFrame
+            new_journeys_df = pd.DataFrame({
+                "id_vehicle": [1, 1],
+                "dep_dt": [pd.Timestamp("2024-01-01 08:00"), pd.Timestamp("2024-01-01 10:00")],
+                "arr_dt": [pd.Timestamp("2024-01-01 09:00"), pd.Timestamp("2024-01-01 11:00")],
+                "dep_loc": [1, 2],
+                "arr_loc": [2, 3],
+                "distance": [10.0, 15.0]
+            })
+
+            # Add journeys to logbooks
+            mob_profiles.logbooks.add_journeys(new_journeys_df)
+
         """
         # Prepare input DataFrame
         prepared_df = self._prep_input_df(input_df)
@@ -271,9 +329,26 @@ class Logbooks(BaseMobilityComponent):
 
         Parameters
         ----------
-        input_df : pd.DataFrame
-                DataFrame with journey data to update.
-                Must include 'id_journey' column.
+        input_df : pandas.DataFrame
+                DataFrame with journey data. Please see column description in :class:`Logbooks` for required columns and types.
+                Must include `id_journey` column.
+                The columns `duration` and `speed` are not required as they are calculated. They will be ignored if provided in the input DataFrame.
+
+        Examples
+        --------
+        This example uses the instance `mob_profiles` defined in the :class:`MobProfiles` examples:
+
+        .. code-block:: python
+
+            # Get the data of the first two journeys and modify its departure times and distance
+            updated_journeys_df = mob_profiles.logbooks.df.head(2)
+
+            updated_journeys_df.loc[:, "arr_dt"] = updated_journeys_df.loc[:, "arr_dt"] + pd.Timedelta(minutes=30)
+            updated_journeys_df.loc[:, "distance"] = updated_journeys_df.loc[:, "distance"] + 5.0
+
+            # Update journeys in logbooks
+            mob_profiles.logbooks.update_journeys(updated_journeys_df)
+
         """
         # Update journeys using base class method
         self._update_rows_of_df(input_df, index_cols=["id_journey"], user_setter=True, prefer_input=False)
@@ -286,6 +361,16 @@ class Logbooks(BaseMobilityComponent):
         ----------
         id_journey : list[int]
                 List of journey IDs to delete.
+
+        Examples
+        --------
+        This example uses the instance `mob_profiles` defined in the :class:`MobProfiles` examples:
+
+        .. code-block:: python
+
+            # Delete the first two journeys of the logbook
+            mob_profiles.logbooks.delete_journeys(id_journey=[1, 2])
+
         """
         # Build deletion mask and deltete rows
         mask_delete = self._df["id_journey"].isin(id_journey)
@@ -310,14 +395,15 @@ class Logbooks(BaseMobilityComponent):
     def restore_location_continuity(self, target: Literal["dep", "arr"] = "dep") -> None:
         """
         Restore location continuity by overwriting either dep_loc or arr_loc.
+
         Meaning location continuity: the departure location (dep_loc) of every journey for a vehicle
         must have the same value as the arrival location (arr_loc) of the previous journey.
 
         Parameters
         ----------
-        target : Literal["dep", "arr"], optional
-                "dep" (default): set dep_loc to previous arr_loc.
-                "arr": set arr_loc to next dep_loc.
+        target : :class:`Literal`["dep", "arr"], optional
+            "dep" (default): set dep_loc to previous arr_loc.
+            "arr": set arr_loc to next dep_loc.
         """
         if self._df is None or self._df.empty:
             return
@@ -340,7 +426,31 @@ class Logbooks(BaseMobilityComponent):
 
     @property
     def temp_res(self) -> float:
-        """Get the temporal resolution of the logbook in hours."""
+        """
+        Temporal resolution of the logbook in hours.
+
+        :getter: Returns the current temporal resolution of the logbook in hours. 
+                 If no temporal resolution has been set, returns None.
+        :setter: Set the temporal resolution of the logbook in hours. 
+                 This will convert the logbook to the specified temporal resolution 
+                 by merging overlapping/adjacent journeys per vehicle.
+        
+        Examples
+        --------
+        This example uses the instance `mob_profiles` defined in the :class:`MobProfiles` examples:
+
+        .. code-block:: python
+
+            # Get current temporal resolution (initially None)
+            current_res = mob_profiles.logbooks.temp_res
+            
+            # Set temporal resolution to 1 hour
+            # This will merge journeys that overlap or are adjacent within 1-hour intervals
+            mob_profiles.logbooks.temp_res = 1.0
+            
+            # Check the new temporal resolution
+            print(mob_profiles.logbooks.temp_res)  # Output: 1.0
+        """
         return self._temp_res
 
     @temp_res.setter
@@ -452,7 +562,44 @@ class VehiclesSchema(pa.DataFrameModel):
 
 class Vehicles(BaseMobilityComponent):
     """
-    Class representing vehicles with aggregated statistics from journeys.
+    Component class included in :class:`MobProfiles` representing vehicles.
+
+    The Vehicles class manages vehicle-level metadata.
+    It is included as a component in the :class:`MobProfiles` class and can be accessed via its instances.
+
+    The DataFrame (accessible via :attr:`~champpy.Vehicles.df`) contains the following columns:
+
+    .. list-table::
+        :header-rows: 1
+
+        * - Column
+          - Type
+          - Description
+        * - id_vehicle
+          - :class:`int`
+          - Vehicle identifier. One-based index for vehicles.
+        * - first_day
+          - :class:`pandas.Timestamp`
+          - First recorded day of the vehicle.
+        * - last_day
+          - :class:`pandas.Timestamp`
+          - Last recorded day of the vehicle.
+        * - id_cluster
+          - :class:`int`
+          - Cluster assignment (optional, default: 1). 
+            Used to group vehicles into different clusters.
+        * - first_loc
+          - :class:`int`
+          - First location of the vehicle (optional, default: None). 
+            Use the same location encoding as in the logbooks.
+    
+    Parameters
+    ----------
+    input_df : :class:`pandas.DataFrame`
+        Input DataFrame for the vehicles. Please see column description above for required columns and types.
+
+    frozen : bool, optional
+        If True, the Vehicles instance is immutable after creation. Default is False.
     """
 
     _schema = VehiclesSchema  # Pandera schema for validation of the vehicles DataFrame
@@ -464,15 +611,10 @@ class Vehicles(BaseMobilityComponent):
         Parameters
         ----------
         input_df : pd.DataFrame, optional
-                Initial DataFrame with vehicle data.
-                Expected columns and dtypes:
-                - id_vehicle: int
-                - first_day: datetime64[D]
-                - last_day:  datetime64[D]
-                - id_cluster:   int (optional: default 1)
-                - first_loc: int (optional: Default None)
+                Initial DataFrame with vehicle data. See column description above.
+
         frozen : bool, optional
-                If True, the Vehiclesinstance is immutable after creation. Default is False.
+                If True, the Vehicles instance is immutable after creation. Default is False.
         """
         self._event_on_logbooks = Event[int]()  # Event triggered on vehicle deletion
         self._event_on_clusters = Event[self]()  # Event triggered on vehicle update
@@ -488,15 +630,26 @@ class Vehicles(BaseMobilityComponent):
         Add vehicles from a DataFrame.
 
         Parameters
-        ----------
+        ----------  
         input_df : pd.DataFrame
-                DataFrame with vehicle data to add.
-                Must include the following columns:
-                - id_vehicle: int
-                - first_day: datetime64[D]
-                - last_day:  datetime64[D]
-                - id_cluster:   int
-                - first_loc: int (optional)
+                DataFrame with vehicle data to add. See column description table in :class:`Vehicles` for required columns.
+
+        Examples
+        --------
+        This example uses the instance `mob_profiles` defined in the :class:`MobProfiles` examples:
+
+        .. code-block:: python
+
+            # Create new vehicles DataFrame
+            new_vehicles_df = pd.DataFrame({
+                "id_vehicle": [3, 4],
+                "first_day": pd.to_datetime(["2020-01-01", "2020-01-02"]),
+                "last_day": pd.to_datetime(["2020-01-03", "2020-01-04"]),
+                "id_cluster": [1, 1],
+                "first_loc": [1, 2]
+            })
+            # Add vehicles from a DataFrame
+            mob_profiles.vehicles.add_vehicles(input_df=new_vehicles_df)
         """
         # Validate input DataFrame
         new_vehicles_df = VehiclesSchema.validate(input_df)
@@ -517,13 +670,20 @@ class Vehicles(BaseMobilityComponent):
         Parameters
         ----------
         input_df : pd.DataFrame
-                DataFrame with vehicle data to update.
-                Must include the following columns:
-                - id_vehicle: int
-                - first_day: datetime64[D]
-                - last_day:  datetime64[D]
-                - id_cluster:   int
-                - first_loc: int (optional)
+                DataFrame with vehicle data to add. See column description table in :class:`Vehicles` for required columns.
+        
+        Examples
+        --------
+        This example uses the instance `mob_profiles` defined in the :class:`MobProfiles` examples:
+
+        .. code-block:: python
+
+            # Get dataframe of the second vehicle and set its cluster to 2
+            updated_vehicles_df = mob_profiles.vehicles.df[mob_profiles.vehicles.df["id_vehicle"] == 2]
+            updated_vehicles_df.loc[:, "id_cluster"] = 2
+            
+            # Update vehicles from a DataFrame
+            mob_profiles.vehicles.update_vehicles(input_df=updated_vehicles_df)
         """
         # Update vehicles using base class method
         self._update_rows_of_df(input_df, index_cols=["id_vehicle"], user_setter=True, prefer_input=False)
@@ -535,6 +695,15 @@ class Vehicles(BaseMobilityComponent):
         ----------
         id_vehicle : list[int]
                 List of vehicle IDs to delete.
+        
+        Examples
+        --------
+        This example uses the instance `mob_profiles` defined in the :class:`MobProfiles` examples:
+
+        .. code-block:: python
+
+            # Delete the second vehicle and all its journeys
+            mob_profiles.vehicles.delete_vehicles(id_vehicle=[2])
         """
         # Build deletion mask
         mask = self._df["id_vehicle"].isin(id_vehicle)
@@ -550,7 +719,7 @@ class Vehicles(BaseMobilityComponent):
 
         Parameters
         ----------
-        logbooks : Logbooks
+        logbooks : :class:`Logbooks`
                 Logbooks instance with journey data to generate vehicles from.
         """
         if isinstance(logbooks, Logbooks) == False:
@@ -591,7 +760,7 @@ class Vehicles(BaseMobilityComponent):
 
         Parameters
         ----------
-        logbooks : Logbooks
+        logbooks : :class:`Logbooks`
                 Logbook instance with journey data to extract first locations from.
         """
         if isinstance(logbooks, Logbooks) == False:
@@ -634,18 +803,45 @@ class ClustersSchema(pa.DataFrameModel):
 
 
 class Clusters(BaseMobilityComponent):
-    "Class representing clusters of vehicles."
+    """
+    Component class included in :class:`MobProfiles` representing vehicle clusters.
+
+    The Clusters class manages cluster assignments for vehicles in the mobility data.
+    It is included as a component in the :class:`MobProfiles` class and can be accessed via its instances.
+    The clusters DataFrame is automatically generated from the vehicles DataFrame 
+    and cannot be set directly, but can be updated via the update methods.
+
+    The DataFrame (accessible via :attr:`~champpy.Clusters.df`) contains the following columns:
+
+    .. list-table::
+        :header-rows: 1
+
+        * - Column
+          - Type
+          - Description
+        * - id_cluster
+          - :class:`int`
+          - Cluster identifier.
+        * - label
+          - :class:`str`
+          - Human-readable label for the cluster.
+
+    Parameters
+    ----------
+    vehicles : :class:`Vehicles`, optional
+        Vehicles instance with vehicle data including 'id_cluster' column.
+        If provided, clusters will be automatically generated from the unique cluster IDs.
+    frozen : bool, optional
+        If True, the Clusters instance is immutable after creation. Default is False.
+    """
 
     _schema = ClustersSchema  # Pandera schema for validation of the clusters DataFrame
 
     def __init__(self, vehicles: Vehicles | None = None, frozen: bool = False):
         """
-        Generate clusters DataFrame.
+        Initialize a Clusters object.
 
-        Parameters
-        ----------
-        vehicles : Vehicles, optional
-                Vehicles instance with vehicle data including 'id_cluster' column.
+        The parameters are described in the class docstring.
         """
         super().__init__(input_df=None)  # call base constructor
         if vehicles is None:
@@ -695,10 +891,23 @@ class Clusters(BaseMobilityComponent):
         Parameters
         ----------
         input_df : pd.DataFrame
-                DataFrame with cluster data to update.
-                Must include the following columns:
-                - id_cluster: int
-                - label: str
+                DataFrame with cluster data to update. 
+                See column description table in :class:`Clusters` for required columns.
+
+        Examples
+        --------
+        This example uses the instance `mob_profiles` defined in the :class:`MobProfiles` examples:
+
+        .. code-block:: python
+
+            # Get current clusters DataFrame
+            clusters_df = mob_profiles.clusters.df
+            
+            # Update cluster labels
+            clusters_df.loc[clusters_df["id_cluster"] == 1, "label"] = "Private Vehicles"
+            
+            # Apply updated labels
+            mob_profiles.clusters.update_clusters(clusters_df)
         """
         # Update clusters DataFrame using function of base class
         self._update_rows_of_df(input_df, index_cols=["id_cluster"], user_setter=False, prefer_input=False)
@@ -712,21 +921,49 @@ class LocationsSchema(pa.DataFrameModel):
 
 
 class Locations(BaseMobilityComponent):
-    "Class representing locations used in journeys."
+    """
+    Component class included in :class:`MobProfiles` representing locations used in journeys.
+
+    The Locations class manages location definitions for the mobility data.
+    It is included as a component in the :class:`MobProfiles` class and can be accessed via its instances.
+    The locations DataFrame is automatically generated from the logbooks and vehicles DataFrames
+    and cannot be set directly, but can be updated via the update methods.
+    Location 0 is reserved for "Driving" and location 1 is typically "Home".
+
+    The DataFrame (accessible via :attr:`~champpy.Locations.df`) contains the following columns:
+
+    .. list-table::
+        :header-rows: 1
+
+        * - Column
+          - Type
+          - Description
+        * - location
+          - :class:`int`
+          - Location identifier (0 = Driving, 1+ = stationary locations).
+        * - label
+          - :class:`str`
+          - Human-readable label for the location (e.g., "Home", "Work", "Location 3").
+
+    Parameters
+    ----------
+    vehicles : :class:`Vehicles`, optional
+        Vehicles instance to extract first_loc values from.
+    logbooks : :class:`Logbooks`, optional
+        Logbooks instance to extract dep_loc and arr_loc values from.
+    frozen : bool, optional
+        If True, the Locations instance is immutable after creation. Default is False.
+    
+
+    """
 
     _schema = LocationsSchema  # Pandera schema for validation of the locations DataFrame
 
     def __init__(self, vehicles: Vehicles | None = None, logbooks: Logbooks | None = None, frozen: bool = False):
         """
-        Initialize Locations instance.
+        Initialize a Locations object.
 
-        Parameters
-        ----------
-        input_df : pd.DataFrame, optional
-                Initial DataFrame with location data.
-                Expected columns and dtypes:
-                - location: int
-                - label: str
+        The parameters are described in the class docstring.
         """
         super().__init__(input_df=None)  # call base constructor
         self.update_locations_from_logbooks_vehicles(logbooks=logbooks, vehicles=vehicles)
@@ -797,9 +1034,21 @@ class Locations(BaseMobilityComponent):
         Parameters
         ----------
         input_df : pd.DataFrame
-                DataFrame with location data to update.
-                Must include the following columns:
-                - location: int
-                - label: str
+                DataFrame with location data to update. See column description table in :class:`Locations` for required columns.
+
+        Examples
+        --------
+        This example uses the instance `mob_profiles` defined in the :class:`MobProfiles` examples:
+
+        .. code-block:: python
+
+            # Get current locations DataFrame
+            locations_df = mob_profiles.locations.df
+            
+            # Update location labels with meaningful names
+            locations_df.loc[locations_df["location"] == 2, "label"] = "Work"
+            
+            # Apply updated labels
+            mob_profiles.locations.update_locations(locations_df)
         """
         self._update_rows_of_df(input_df, index_cols=["location"], user_setter=False, prefer_input=False)

@@ -9,42 +9,134 @@ from champpy.utils.time_utils import get_datetime_array
 
 logger = logging.getLogger(__name__)
 
-# TODO: MobData lieber in MobProfiles umbenennen?
-
-
-class MobData:
+class MobProfiles:
     """
-    Wrapper class for mobility data in the champpy framework.
+    Wrapper class for mobility profiles in the champpy framework.
+
     It contains the logbooks, vehicles, clusters and locations as separate classes.
+
+    Parameters
+    ----------
+    input_logbooks_df : :class:`pandas.DataFrame`
+        Input DataFrame for the logbooks.
+        Expected columns and dtypes:
+
+        .. list-table::
+           :header-rows: 1
+
+           * - Column
+             - Type
+             - Description
+           * - id_vehicle
+             - :class:`int`
+             - One-based index for vehicles, connected to id_vehicle in input_vehicles_df.
+           * - dep_dt
+             - :class:`pandas.Timestamp`
+             - Departure datetime of each journey.
+           * - arr_dt
+             - :class:`pandas.Timestamp`
+             - Arrival datetime of each journey.
+           * - dep_loc
+             - :class:`int`
+             - Departure location of each journey as integer above 0. 
+               You can for example define 1 for home, 2 for work, etc. 
+               The location = 0 is reserved for driving and not allowed in this dataframe.
+           * - arr_loc
+             - :class:`int`
+             - Arrival location of each journey as integer above 0. 
+               You can for example define 1 for home, 2 for work, etc. 
+               The location = 0 is reserved for driving and not allowed in this dataframe.
+           * - distance
+             - :class:`float`
+             - Distance of each journey in km.
+
+    input_vehicles_df : :class:`pandas.DataFrame`, optional
+        Input DataFrame for the vehicles. If not provided, the vehicles will be generated from the logbooks.
+        Expected columns and dtypes:
+
+        .. list-table::
+           :header-rows: 1
+
+           * - Column
+             - Type
+             - Description
+           * - id_vehicle
+             - :class:`int`
+             - Vehicle identifier.
+           * - first_day
+             - :class:`pandas.Timestamp`
+             - First recorded day of the vehicle.
+           * - last_day
+             - :class:`pandas.Timestamp`
+             - Last recorded day of the vehicle.
+           * - cluster
+             - :class:`int`
+             - Split the vehicles into clusters by assigning a cluster ID (one-based) to each vehicle. 
+               This is optional and can be used for example to distinguish between different user groups.
+               If you don't want to use clusters, you can simply set the cluster column to 1 for all vehicles.
+           * - first_loc
+             - :class:`int`
+             - First location (optional). Use the same location encoding as in dep_loc and arr_loc in input_logbooks_df.
+               It is espacially relevant for non-driving vehicles, which do not have any journeys in the logbooks.
+
+    frozen : :class:`bool`, optional
+        If True, the MobProfiles instance is immutable after creation. Default is False.
+    
+    Attributes
+    ----------
+    logbooks : :class:`Logbooks`
+            Contains the journey data of the mobility profile with departure and arrival information.
+    vehicles : :class:`Vehicles`
+            Contains vehicle-specific data about eaach vehicle, 
+            such as its first and last day of activity, cluster assignment, and first location. 
+            It is connected to logbooks via id_vehicle.
+    clusters : :class:`Clusters`
+            Describes the clusters defined in vehicles. It is connected to vehicles via id_cluster.
+            It provides a label for each cluster. 
+    locations : :class:`Locations`
+            Describes the locations defined in logbooks and vehicles. The location is connected to logbooks via dep_loc and arr_loc and to vehicles via first_loc.
+            It provides a label for each location. The location = 0 is reserved for driving and gets the label "Driving".
+
+    Examples
+    --------
+    Create a MobProfiles instance with minimal example data:
+
+    .. code-block:: python
+
+        import pandas as pd
+        import champpy
+
+        # Create example logbook data with synthetic journeys
+        logbook_df = pd.DataFrame({
+            'id_vehicle': [1, 1, 2],
+            'dep_dt': pd.to_datetime(['2024-01-01 08:00', '2024-01-01 18:00', '2024-01-01 09:30']),
+            'arr_dt': pd.to_datetime(['2024-01-01 12:00', '2024-01-01 22:00', '2024-01-01 17:30']),
+            'dep_loc': [1, 2, 1],
+            'arr_loc': [2, 1, 1],
+            'distance': [25.5, 30.2, 18.0]
+        })
+
+        # Create example vehicle data
+        vehicle_df = pd.DataFrame({
+            'id_vehicle': [1, 2],
+            'first_day': pd.to_datetime(['2024-01-01', '2024-01-01']),
+            'last_day': pd.to_datetime(['2024-01-02', '2024-01-02']),
+            'id_cluster': [1, 1],
+            'first_loc': [1, 1]
+        })
+
+        # Create mobility profiles
+        mob_profiles = champpy.MobProfiles(input_logbooks_df=logbook_df,
+                                   input_vehicles_df=vehicle_df)
     """
 
     def __init__(
         self, input_logbooks_df: pd.DataFrame, input_vehicles_df: pd.DataFrame | None = None, frozen: bool = False
     ):
         """
-        Initialize a MobData object.
+        Initialize a MobProfiles object.
 
-        Parameters
-        ----------
-        input_logbooks_df : pd.DataFrame
-                Input DataFrame for the logbooks.
-                Expected columns and dtypes:
-                - id_vehicle: int
-                - dep_dt: datetime64[ns]
-                - arr_dt: datetime64[ns]
-                - dep_loc: str
-                - arr_loc: str
-                - distance: float
-        input_vehicles_df : pd.DataFrame, optional
-                Input DataFrame for the vehicles.
-                Expected columns and dtypes:
-                - id_vehicle: int
-                - first_day: datetime64[D]
-                - last_day:  datetime64[D]
-                - cluster:   int
-                - first_loc: int (optional)
-        frozen : bool, optional
-                If True, the MobData instance is immutable after creation. Default is False.
+        The parameters are described in the class docstring. 
         """
         # Initialize logbooks and vehicles
         self.logbooks = Logbooks(input_df=input_logbooks_df, frozen=frozen)
@@ -73,38 +165,53 @@ class MobData:
 
     def __copy__(self):
         """Create Copy of Instance that can be called by copy.copy(obj)"""
-        return MobData(self.logbooks.df, self.vehicles.df)
+        return MobProfiles(self.logbooks.df, self.vehicles.df)
 
     def copy(self):
         """Create Copy of Instance"""
         return self.__copy__()
 
-    def add_mob_data(
-        self, input_mob_data: "MobData", old_cluster_label: str = "Old", new_cluster_label: str = "New"
+    def add_mob_profiles(
+        self, input_mob_profiles: "MobProfiles", old_cluster_label: str = "Old", new_cluster_label: str = "New"
     ) -> None:
         """
-        Add mobility data from another MobData instance.
-        The vehicles of the existing MobData instance gets id_cluster = 1.
-        The vehicles of the added MobData instance gets id_cluster = 2.
+        Add mobility data from another MobProfiles instance.
+        The vehicles of the existing MobProfiles instance gets id_cluster = 1.
+        The vehicles of the added MobProfiles instance gets id_cluster = 2.
         You can set labels for existing data using old_cluster_label and for added data using new_cluster_label.
 
         Parameters
         ----------
-        input_mob_data : MobData
-                Another MobData instance to add data from.
+        input_mob_profiles : MobProfiles
+                Another MobProfiles instance to add data from.
         old_cluster_label: str
                 Label for existing data
         new_cluster_label: str
                 Label for added data
+
+        Examples
+        --------
+        Assuming `mob_profiles` exists (see :class:`MobProfiles` examples):
+        
+        .. code-block:: python
+
+            # Create second dataset
+            other_logbook_df = pd.DataFrame({...})
+            other_mob_profiles = champpy.MobProfiles(other_logbook_df)
+            
+            # Add to existing mob_profiles
+            mob_profiles.add_mob_profiles(input_mob_profiles=other_mob_profiles, 
+                                  old_cluster_label="Existing", 
+                                  new_cluster_label="Added")
         """
-        if not isinstance(input_mob_data, MobData):
-            message = "other must be an instance of MobData."
+        if not isinstance(input_mob_profiles, MobProfiles):
+            message = "other must be an instance of MobProfiles."
             logger.error(message)
             raise TypeError(message)
 
         # extract dataframes
-        new_logbooks_df = input_mob_data.logbooks.df
-        new_vehicles_df = input_mob_data.vehicles.df
+        new_logbooks_df = input_mob_profiles.logbooks.df
+        new_vehicles_df = input_mob_profiles.vehicles.df
 
         # Make sure vehicle IDs and clusters are unique across both datasets
         max_id_vehicle = self.vehicles.df["id_vehicle"].max() if not self.vehicles.df.empty else 0
@@ -135,7 +242,7 @@ class MobData:
     @validate_call
     def reindexing(self, type: Literal["all", "id_journey", "id_vehicle", "id_cluster"] = "all") -> None:
         """
-        Reindex of IDs in the MobData instance (id_journey, id_vehicle, id_cluster).
+        Reindex of IDs in the MobProfiles instance (id_journey, id_vehicle, id_cluster).
 
         Parameters
         ----------
@@ -170,20 +277,20 @@ class MobData:
             self.logbooks._df["id_journey"] = self.logbooks._df["id_journey"].map(journey_map)
 
 
-class MobDataExtended:
+class MobProfilesExtended:
     """
-    Extended MobData with additional attributes for modeling.
+    Extended MobProfiles with additional attributes for modeling.
 
     Parameters
     ----------
-    mob_data : MobData
-            Base MobData instance.
+    mob_profiles : MobProfiles
+            Base MobProfiles instance.
     """
 
-    def __init__(self, mob_data: MobData, splitdays: bool = True, clustering: bool = True):
+    def __init__(self, mob_profiles: MobProfiles, splitdays: bool = True, clustering: bool = True):
 
-        if not isinstance(mob_data, MobData):
-            message = "mob_data must be an instance of MobData class."
+        if not isinstance(mob_profiles, MobProfiles):
+            message = "mob_profiles must be an instance of MobProfiles class."
             logger.error(message)
             raise TypeError(message)
 
@@ -198,35 +305,35 @@ class MobDataExtended:
             }
         )
 
-        # Extend mob_data to include standing and non-driving vehicles
-        self._extended_mob_data(mob_data)
+        # Extend mob_profiles to include standing and non-driving vehicles
+        self._extended_mob_profiles(mob_profiles)
 
         # Split multi-day rows if required
         self._split_multi_day_rows(splitdays=splitdays)
 
         # Join the 'id_cluster' column from t_vehicle into t_location
         if clustering:
-            self._df = self._df.merge(mob_data.vehicles._df[["id_vehicle", "id_cluster"]], on="id_vehicle", how="left")
+            self._df = self._df.merge(mob_profiles.vehicles._df[["id_vehicle", "id_cluster"]], on="id_vehicle", how="left")
             self._df["id_cluster"] = self._df["id_cluster"].astype("int64")
-            self.labels_clusters = mob_data.clusters.df["label"].tolist()
-            self.clusters = mob_data.clusters.df["id_cluster"].unique().tolist()
+            self.labels_clusters = mob_profiles.clusters.df["label"].tolist()
+            self.clusters = mob_profiles.clusters.df["id_cluster"].unique().tolist()
         else:
             self._df["id_cluster"] = 1
             self.labels_clusters = ["Total"]
             self.clusters = [1]
 
-        self.labels_locations = mob_data.locations.df["label"].tolist()
-        self.locations = mob_data.locations.df["location"].unique().tolist()
+        self.labels_locations = mob_profiles.locations.df["label"].tolist()
+        self.locations = mob_profiles.locations.df["location"].unique().tolist()
 
     @property
     def df(self) -> pd.DataFrame:
-        """Get a copy of the extended MobData DataFrame."""
+        """Get a copy of the extended MobProfiles DataFrame."""
         # Calculate distance and duration
         duration = (self._df["end_dt"] - self._df["start_dt"]).dt.total_seconds() / 3600  # in hours
         distance = self._df["speed"] * duration  # in km/h
         return self._df.copy().assign(duration=duration, distance=distance)
 
-    def _extended_mob_data(self, mob_data: MobData):
+    def _extended_mob_profiles(self, mob_profiles: MobProfiles):
         """
         Create extended DataFrame with additional attributes.
 
@@ -236,21 +343,21 @@ class MobDataExtended:
                 Extended DataFrame.
         """
         # Logging
-        logger.info("Extending MobData")
+        logger.info("Extending MobProfiles")
         # convert automatically to uniform temporal resolution
-        if mob_data.logbooks.temp_res is None:
+        if mob_profiles.logbooks.temp_res is None:
             # find the minimum temporal resolution in hours
-            min_res = mob_data.logbooks.df.apply(
+            min_res = mob_profiles.logbooks.df.apply(
                 lambda row: (row["arr_dt"] - row["dep_dt"]).total_seconds() / 3600, axis=1
             ).min()
-            mob_data.logbooks.temp_res = min_res
+            mob_profiles.logbooks.temp_res = min_res
 
-        lb_df = mob_data.logbooks._df
-        vehicles_df = mob_data.vehicles._df
+        lb_df = mob_profiles.logbooks._df
+        vehicles_df = mob_profiles.vehicles._df
 
         # determine first_loc for vehicles if nan
         if any(vehicles_df["first_loc"].isna()):
-            vehicles_df.set_first_loc_from_logbooks(mob_data.logbooks)
+            vehicles_df.set_first_loc_from_logbooks(mob_profiles.logbooks)
 
         # Identify non-drivers
         mask_nondriver_vehicle = ~vehicles_df["id_vehicle"].isin(lb_df["id_vehicle"])
@@ -406,32 +513,32 @@ class MobDataExtended:
 class MobArray:
     """
     Mobility data in array format for efficient modeling.
-    Child of MobDataExtended.
+    Child of MobProfilesExtended.
     """
 
-    def __init__(self, mob_data: MobData):
+    def __init__(self, mob_profiles: MobProfiles):
         # Logging
-        logger.info("Creating MobArray from MobData")
+        logger.info("Creating MobArray from MobProfiles")
         # Check that all vehicles have same first_day and last_day
-        n_first_days = mob_data.vehicles.df["first_day"].nunique()
-        n_last_days = mob_data.vehicles.df["last_day"].nunique()
+        n_first_days = mob_profiles.vehicles.df["first_day"].nunique()
+        n_last_days = mob_profiles.vehicles.df["last_day"].nunique()
         if n_first_days != 1 or n_last_days != 1:
-            message = "All vehicles in mob_data must have the same first_day and last_day to create MobArray."
+            message = "All vehicles in mob_profiles must have the same first_day and last_day to create MobArray."
             logger.error(message)
             raise ValueError(message)
-        first_day = mob_data.vehicles.df["first_day"].iloc[0]
-        last_day = mob_data.vehicles.df["last_day"].iloc[0]
-        mob_data_ext_df = MobDataExtended(mob_data=mob_data, splitdays=True).df
-        temp_res = mob_data.logbooks.temp_res
+        first_day = mob_profiles.vehicles.df["first_day"].iloc[0]
+        last_day = mob_profiles.vehicles.df["last_day"].iloc[0]
+        mob_profiles_ext_df = MobProfilesExtended(mob_profiles=mob_profiles, splitdays=True).df
+        temp_res = mob_profiles.logbooks.temp_res
         dt_array, _ = get_datetime_array(start_date=first_day, end_date=last_day, temp_res=temp_res)
         # Get index in dt_array for start_dt and end_dt
         start_idx = pd.Series(
-            np.searchsorted(dt_array, mob_data_ext_df["start_dt"].values), index=mob_data_ext_df.index
+            np.searchsorted(dt_array, mob_profiles_ext_df["start_dt"].values), index=mob_profiles_ext_df.index
         )
-        end_idx = pd.Series(np.searchsorted(dt_array, mob_data_ext_df["end_dt"].values), index=mob_data_ext_df.index)
+        end_idx = pd.Series(np.searchsorted(dt_array, mob_profiles_ext_df["end_dt"].values), index=mob_profiles_ext_df.index)
 
         # Predefine arrays
-        number_vehicles = mob_data.vehicles.number
+        number_vehicles = mob_profiles.vehicles.number
         number_steps = len(dt_array)
         self.location = np.zeros((number_steps, number_vehicles), dtype=int)
         self.speed = np.zeros((number_steps, number_vehicles), dtype=float)
@@ -441,25 +548,25 @@ class MobArray:
         # Extract data into 1D arrays
         all_idx = np.concatenate([np.arange(s, e) for s, e in zip(start_idx, end_idx)])
         all_id_vehicles = np.concatenate(
-            [np.full(e - s, vid) for vid, s, e in zip(mob_data_ext_df["id_vehicle"], start_idx, end_idx)]
+            [np.full(e - s, vid) for vid, s, e in zip(mob_profiles_ext_df["id_vehicle"], start_idx, end_idx)]
         )
         all_locations = np.concatenate(
-            [np.full(e - s, loc) for loc, s, e in zip(mob_data_ext_df["location"], start_idx, end_idx)]
+            [np.full(e - s, loc) for loc, s, e in zip(mob_profiles_ext_df["location"], start_idx, end_idx)]
         )
         all_speeds = np.concatenate(
-            [np.full(e - s, spd) for spd, s, e in zip(mob_data_ext_df["speed"], start_idx, end_idx)]
+            [np.full(e - s, spd) for spd, s, e in zip(mob_profiles_ext_df["speed"], start_idx, end_idx)]
         )
         all_distances = np.concatenate(
-            [np.full(e - s, spd) for spd, s, e in zip(mob_data_ext_df["speed"], start_idx, end_idx)]
+            [np.full(e - s, spd) for spd, s, e in zip(mob_profiles_ext_df["speed"], start_idx, end_idx)]
         )
         all_distances_distributed = np.concatenate(
             [
                 np.full(e - s, dist / (e - s) if e > s else 0)
-                for dist, s, e in zip(mob_data_ext_df["distance"], start_idx, end_idx)
+                for dist, s, e in zip(mob_profiles_ext_df["distance"], start_idx, end_idx)
             ]
         )
         all_speeds_distributed = np.concatenate(
-            [np.full(e - s, spd) for spd, s, e in zip(mob_data_ext_df["speed"], start_idx, end_idx)]
+            [np.full(e - s, spd) for spd, s, e in zip(mob_profiles_ext_df["speed"], start_idx, end_idx)]
         )
 
         # Convert into 2D arrays

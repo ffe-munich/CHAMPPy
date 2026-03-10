@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from rich.progress import track
 from scipy.stats import beta, mode
 
-from champpy.core.mobility.mobility_data import MobData
+from champpy.core.mobility.mobility_data import MobProfiles
 from champpy.core.mobility.parameterization import ModelParams
 from champpy.utils.time_utils import get_day_index, get_datetime_array, TypeDays
 
@@ -16,17 +16,26 @@ logger = logging.getLogger(__name__)
 @dataclass
 class UserParamsMobModel:
     """
-    Dataclass for user parameters for the mobility model.
-    Args:
-        n_clusters: Number of clusters to use in the mobility model.
+    User parameters for configuring the mobility profile generation.
+
+    This dataclass contains all user parameters for generating synthetic mobility profiles
+    with the :class:`MobModel`. It defines the simulation period, number of vehicles, random seed,
+    and other settings that control the profile generation process.
+
+    Raises
+    ------
+    ValueError
+        If number_vehicles is less than 1.
+    ValueError
+        If start_date is not at least one day before end_date.
     """
 
-    number_vehicles: int = 50  # Number of vehicles to generate mobility profiles for
-    start_date: pd.Timestamp = pd.Timestamp("2025-01-01")  # Start date for the mobility profiles
-    end_date: pd.Timestamp = pd.Timestamp("2025-12-31")  # End date for the mobility profiles
-    random_seed: int = 1  # Random seed for reproducibility
-    days_buffer: int = 1  # Buffer days before and after start and end date to avoid edge effects
-    first_loc: int = 1  #
+    number_vehicles: int = 50  #: Number of vehicles to generate mobility profiles for. Must be at least 1. Default is 50.
+    start_date: pd.Timestamp = pd.Timestamp("2025-01-01")  #: Start date for the mobility profile generation period. Default is "2025-01-01".
+    end_date: pd.Timestamp = pd.Timestamp("2025-12-31")  #: End date for the mobility profile generation period. Must be at least one day after start_date. Default is "2025-12-31".
+    random_seed: int = 1  #: Random seed for reproducibility of the generated profiles. Default is 1.
+    days_buffer: int = 1  #: Number of buffer days before and after the simulation period to avoid edge effects. Default is 1.
+    first_loc: int = 1  #: Initial location ID for all vehicles at the start of the simulation. Typically 1 represents "Home". Default is 1.
 
     def __post_init__(self):
         # Validate number of vehicles: positive integer
@@ -44,15 +53,78 @@ class UserParamsMobModel:
 
 class MobModel:
     """
-    Class for the model that creates mobility profiles (MobData).
-    Args:
-        model_params: ModelParams dataclass containing mobility model parameters.
+    Mobility model for generating synthetic vehicle mobility profiles.
+
+    The MobModel class uses a Markov chain approach to generate
+    realistic mobility profiles (:class:`MobProfiles`) for a fleet of vehicles. The model simulates
+    vehicle locations over time, journey starts and ends, speeds, and distances based on
+    statistical parameters defined in :class:`ModelParams`.
+
+    Parameters
+    ----------
+    model_params : :class:`ModelParams`
+        Dataclass containing calibrated mobility model parameters including transition matrices,
+        speed distributions, and other statistical parameters for different vehicle clusters.
+
+    Attributes
+    ----------
+    model_params : :class:`ModelParams`
+        Stored model parameters used for profile generation.
+
+    Examples
+    --------
+    .. code-block:: python
+    
+        import pandas as pd
+        import champpy
+
+        # Load model parameters
+        params_loader = champpy.ParamsLoader()
+        model_params = params_loader.load_params(id_params=1)
+
+        # Initialize the mobility model with the model parameters
+        mob_model = champpy.MobModel(model_params=model_params)
+
+        # Define user parameters for generation
+        user_params = UserParamsMobModel(
+            number_vehicles=10,
+            start_date=pd.Timestamp("2025-01-01"),
+            end_date=pd.Timestamp("2025-12-31"),
+            random_seed=42
+        )
+
+        # Generate mobility profiles 
+        mob_profiles = mob_model.generate_mob_profiles(user_params)
     """
 
     def __init__(self, model_params: ModelParams):
+        """
+        Initialize a MobModel instance.
+
+        The parameters are described in the class docstring.
+        """
         self.model_params = model_params
 
-    def generate_mob_profiles(self, user_params: UserParamsMobModel) -> MobData:
+    def generate_mob_profiles(self, user_params: UserParamsMobModel) -> MobProfiles:
+        """
+        Generate synthetic mobility profiles for a fleet of vehicles.
+
+        This method creates mobility profiles by simulating vehicle movements using a Markov chain
+        approach. For each time step, the model determines vehicle locations based on transition
+        probabilities, identifies journey starts and ends, and calculates speeds and distances.
+
+        Parameters
+        ----------
+        user_params : :class:`UserParamsMobModel`
+            User-defined parameters specifying the number of vehicles, simulation period,
+            and other configuration settings.
+
+        Returns
+        -------
+        :class:`MobProfiles`
+            Generated mobility profiles containing logbooks, vehicles, clusters, and locations data.
+
+        """
 
         logger.info(
             "Start generating mobility profiles for %d vehicles from %s to %s",
@@ -94,7 +166,7 @@ class MobModel:
         # Claculate speed and distance arrays based on start_journey_array and duration_array
         self._generate_speed_and_distance()
 
-        # Convert arrays to Mobdata instance
+        # Convert arrays to MobProfiles instance
         mob_profiles = self._convert_arrays2mob_profiles()
 
         return mob_profiles
@@ -250,7 +322,7 @@ class MobModel:
         self._speed_array[mask_start] = speed_jarray
         self._distance_array[mask_start] = distance_jarray
 
-    def _convert_arrays2mob_profiles(self) -> MobData:
+    def _convert_arrays2mob_profiles(self) -> MobProfiles:
         """
         Convert the generated arrays to a pandas DataFrame representing the logbook.
         Returns:
@@ -301,7 +373,7 @@ class MobModel:
             }
         )
 
-        mob_profiles = MobData(input_logbooks_df=logbook_df, input_vehicles_df=vehicle_df)
+        mob_profiles = MobProfiles(input_logbooks_df=logbook_df, input_vehicles_df=vehicle_df)
 
         # Update location labels
         locations_df = mob_profiles.locations.df

@@ -9,21 +9,57 @@ from pydantic import field_validator, Field as pydantic_Field
 from dataclasses import dataclass, field
 
 from champpy.core.mobility.mobility_components import Vehicles, VehiclesSchema, Clusters
-from champpy.core.mobility.mobility_data import MobArray, MobData
+from champpy.core.mobility.mobility_data import MobArray, MobProfiles
 
 
 @pydantic_dataclass
 class UserParamsChargingModel:
+    """
+    Data class to define user parameters for the charging profile generation.
+
+    This configuration class defines electric vehicle properties and charging
+    behavior used by :class:`ChargingModel`.
+
+    Examples
+    --------
+    >>> params = UserParamsChargingModel(
+    ...     energy_consumption_kwh_per_km=[0.2],
+    ...     battery_capacity_kwh=[60.0],
+    ...     charging_power_max_kw=[11.0],
+    ...     charging_locations=[1, 2],
+    ...     temp_res=0.25,
+    ... )
+    """
+
     energy_consumption_kwh_per_km: list[float] = field(default_factory=lambda: [0.2])
+    """Energy consumption in kWh/km per vehicle or as a scalar list."""
+
     battery_capacity_kwh: list[float] = field(default_factory=lambda: [50.0])
+    """Battery capacity in kWh per vehicle or as a scalar list."""
+
     charging_power_max_kw: list[float] = field(default_factory=lambda: [7.0])
+    """Maximum charging power in kW per vehicle or as a scalar list."""
+
     efficiency_charging: list[float] = field(default_factory=lambda: [0.9])
+    """Charging efficiency in the interval $(0, 1]$ per vehicle or as a scalar list."""
+
     soc_min: list[float] = field(default_factory=lambda: [0.1])
+    """Minimum state of charge (SoC) in the interval $[0, 1)$ per vehicle."""
+
     soc_min_dep: list[float] = field(default_factory=lambda: [0.8])
+    """Minimum SoC required at departure in the interval $(0, 1]$ per vehicle."""
+
     soc_initial: float = pydantic_Field(ge=0, le=1, default=1)
+    """Initial SoC at simulation start in the interval $[0, 1]$."""
+
     distribute_energy_consumption: bool = True
+    """If ``True``, distribute trip energy over all trip time steps."""
+
     charging_locations: list[int] = field(default_factory=lambda: [1])
+    """Location IDs where charging is allowed."""
+
     temp_res: float = pydantic_Field(ge=1 / 60, default=0.25)
+    """Temporal resolution in hours used for charging simulation."""
 
     @field_validator("energy_consumption_kwh_per_km")
     def check_energy_consumption(cls, v):
@@ -89,8 +125,53 @@ class EletricVehiclesSchema(VehiclesSchema):
 
 
 class ElectricVehicles(Vehicles):
-    """
-    Class for electric vehicles, extending the Vehicles class with additional parameters needed for charging profile calculations.
+    """Electric vehicle component extending :class:`Vehicles`.
+
+    This class is based on the vehicles contained in :class:`~champpy.MobProfiles`
+    and adds charging-related parameters required for charging profile calculations.
+
+    The DataFrame (accessible via the ``df`` property) contains all columns from
+    :class:`Vehicles` plus additional charging-related parameters:
+
+    .. list-table::
+       :header-rows: 1
+
+       * - Column
+         - Type
+         - Description
+       * - id_vehicle
+         - :class:`int`
+         - Vehicle identifier.
+       * - first_day
+         - :class:`pandas.Timestamp`
+         - First recorded day of the vehicle.
+       * - last_day
+         - :class:`pandas.Timestamp`
+         - Last recorded day of the vehicle.
+       * - id_cluster
+         - :class:`int`
+         - Cluster assignment.
+       * - first_loc
+         - :class:`int`
+         - First location of the vehicle.
+       * - energy_consumption_kwh_per_km
+         - :class:`float`
+         - Energy consumption per kilometer in kWh/km.
+       * - battery_capacity_kwh
+         - :class:`float`
+         - Battery capacity in kWh.
+       * - charging_power_max_kw
+         - :class:`float`
+         - Maximum charging power in kW.
+       * - efficiency_charging
+         - :class:`float`
+         - Charging efficiency (0-1).
+       * - soc_min
+         - :class:`float`
+         - Minimum state of charge (0-1).
+       * - soc_min_dep
+         - :class:`float`
+         - Minimum state of charge at departure (0-1).
     """
 
     _schema = EletricVehiclesSchema
@@ -111,7 +192,6 @@ class ElectricVehicles(Vehicles):
                 raise ValueError(f"user_params must have attribute '{param}'")
             vehicles_df[param] = self._convert_userparam_to_arrays(getattr(user_params, param), num_vehicles)
         super().__init__(vehicles_df)
-        # Convert user parameters to arrays and store them in dataframe of the Vehicles class
 
     def _convert_userparam_to_arrays(self, user_param: list[float], num_vehicles: int) -> np.ndarray:
         """Convert user parameters to arrays matching the number of vehicles."""
@@ -123,6 +203,25 @@ class ElectricVehicles(Vehicles):
         else:
             raise ValueError("user_param must have length 1 or number of vehicles")
 
+    def generate_vehicles_from_logbooks(self, logbooks):
+        """Not allowed for ElectricVehicles. Only implemented for Vehicles class ."""
+        raise AttributeError("generate_vehicles_from_logbooks is not available for ElectricVehicles class.")
+
+    def delete_vehicles(self, id_vehicle):
+        """Not allowed for ElectricVehicles. Only implemented for Vehicles class ."""
+        raise AttributeError("delete_vehicles is not available for ElectricVehicles class.")
+
+    def set_first_loc_from_logbooks(self, logbooks):
+        """Not allowed for ElectricVehicles. Only implemented for Vehicles class ."""
+        raise AttributeError("set_first_loc_from_logbooks is not available for ElectricVehicles class.")
+
+    def update_vehicles(self, input_df):
+        """Not allowed for ElectricVehicles. Only implemented for Vehicles class ."""
+        raise AttributeError("update_vehicles is not available for ElectricVehicles class.")
+    
+    def add_vehicles(self, input_df):
+        """Not allowed for ElectricVehicles. Only implemented for Vehicles class ."""
+        raise AttributeError("add_vehicles is not available for ElectricVehicles class.")
 
 @dataclass
 class ChargingArray:
@@ -138,7 +237,42 @@ class ChargingArray:
 
 
 class ChargingTimeseries:
-    """Class to hold charging profiles as a DataFrame."""
+    """Class to hold charging profiles as a DataFrame.
+
+    Each row corresponds to a time step and a vehicle and contains information
+    about charging status, energy consumption, energy stored, charging power,
+    and missing energy.
+    
+    The DataFrame (accessible via the `df` property) contains the following columns:
+
+    .. list-table::
+       :header-rows: 1
+
+       * - Column
+         - Type
+         - Description
+       * - id_vehicle
+         - :class:`int`
+         - Vehicle identifier.
+       * - datetime
+         - :class:`pandas.Timestamp`
+         - Date and time of the time step.
+       * - connected
+         - :class:`bool`
+         - Boolean indicating whether the vehicle is connected to a charging station at the given time step.
+       * - energy_consumption_kwh
+         - :class:`float`
+         - Energy consumption in kWh at the given time step.
+       * - energy_stored_kwh
+         - :class:`float`
+         - Energy stored in the battery in kWh at the given time step.
+       * - power_charging_kw
+         - :class:`float`
+         - Charging power in kW at the given time step.
+       * - energy_missing_kwh
+         - :class:`float`
+         - Energy in kWh that is missing at the given time step (i.e., energy that should have been charged but was not because the vehicle was not connected).
+    """
 
     def __init__(self, charging_array: ChargingArray):
 
@@ -162,14 +296,27 @@ class ChargingTimeseries:
 
     @property
     def df(self):
+        """Return a copy of the DataFrame containing the charging timeseries data."""
         return self._df.copy()
 
 
-# TODO: ChargingData lieber in ChargingProfiles umbenennen?
-class ChargingData:
+class ChargingProfiles:
     """
     Wrapper class for charging data in the champpy framework.
-    It contains the charging_timeseries, vehicles, clusters as separate classes.
+    It contains instances of the following classes: :class:`ChargingTimeseries`, :class:`ElectricVehicles`, :class:`Clusters`.
+    This class is genereated by the :class:`ChargingModel` class. Don't instantiate it directly.
+
+    Attributes
+    ----------
+    charging_timeseries: :class:`ChargingTimeseries`
+            Contains the charging data for each vehicle over time.
+    vehicles: :class:`ElectricVehicles`
+            Contains vehicle-specific data about each vehicle, 
+            such as its first and last day of activity, cluster assignment, battery capacity, max. charging power etc. 
+            It is connected to logbooks via `id_vehicle`.
+    clusters: :class:`Clusters`
+            Describes the clusters defined in vehicles. It is connected to vehicles via `id_cluster`.
+            It provides a label for each cluster.    
     """
 
     def __init__(self, charging_array: ChargingArray, vehicles: ElectricVehicles, clusters: Clusters):
@@ -179,25 +326,78 @@ class ChargingData:
 
 
 class ChargingModel:
-    """Class to generate charging profiles based on mobility data and user parameters."""
+    """
+    Model for generating charging profiles from mobility data and user parameters.
 
-    def __init__(self, mob_data: MobData):
+    The model uses an algorithm that iterates over each time step and each vehicle to determine 
+    the charging status, energy consumption, energy stored, and missing energy based on the mobility data 
+    and user parameters. The resulting charging profiles are stored in a :class:`ChargingProfiles` object.
+    
+    Parameters
+    ----------
+    mob_profiles : :class:`~champpy.MobProfiles`
+        Mobility profiles containing vehicle movement data and temporal information.
+    
+    Examples
+    --------
+    Generate charging profiles for synthetic mobility data:
+    
+    .. code-block:: python
+    
+        from champpy import MobModel, ChargingModel, UserParamsChargingModel
+        
+        # Generate synthetic mobility profiles
+        mob_model = MobModel(model_params)
+        mob_profiles = mob_model.generate_mob_profiles(num_vehicles=100, days=7)
+        
+        # Create charging model
+        charging_model = ChargingModel(mob_profiles)
+        
+        # Configure charging parameters
+        charging_params = UserParamsChargingModel(
+            energy_consumption_kwh_per_km=[0.2],
+            battery_capacity_kwh=[60.0],
+            charging_power_max_kw=[7.0],
+            charging_locations=[1]  # Charge at locations 1
+        )
+        
+        # Generate charging profiles
+        charging_profiles = charging_model.generate_charging_profiles(charging_params)
+    """
+
+    def __init__(self, mob_profiles: MobProfiles):
         """
-        Class for the model that creates charging profiles (ChargingArray).
-        Args:
-            mob_data: MobData class containing mobility profiles.
+        Initialize charging model from mobility profiles.
+
+        Parameters
+        ----------
+        mob_profiles : :class:`~champpy.MobProfiles`
+            Mobility profiles containing logbooks, vehicles, and clusters.
         """
-        self._mob_arrays = MobArray(mob_data)
-        self._temp_res = mob_data.logbooks.temp_res  # in hours
-        self._vehicles = mob_data.vehicles
-        self._clusters = mob_data.clusters
+        self._mob_arrays = MobArray(mob_profiles)
+        self._temp_res = mob_profiles.logbooks.temp_res  # in hours
+        self._vehicles = mob_profiles.vehicles
+        self._clusters = mob_profiles.clusters
         self._number_steps = len(self._mob_arrays.datetime)
-        self._num_vehicles = mob_data.vehicles.number
+        self._num_vehicles = mob_profiles.vehicles.number
         self._dt = self._mob_arrays.datetime
         self._id_vehicle = self._mob_arrays.id_vehicle
 
-    def generate_charging_profiles(self, user_params: UserParamsChargingModel) -> ChargingData:
-        """Generate charging profiles based on mobility data and user parameters."""
+    def generate_charging_profiles(self, user_params: UserParamsChargingModel) -> ChargingProfiles:
+        """
+        Generate charging profiles from mobility data and charging parameters.
+
+        Parameters
+        ----------
+        user_params : UserParamsChargingModel
+            User-defined charging model parameters.
+
+        Returns
+        -------
+        ChargingProfiles
+            Generated charging profiles including timeseries, electric vehicles,
+            and clusters.
+        """
         # Define vehicles
         vehicles = ElectricVehicles(self._vehicles, user_params)
 
@@ -257,9 +457,9 @@ class ChargingModel:
             self._charging_array.energy_stored_kwh[t, mask_con] += energy_charged
             self._charging_array.energy_missing_kwh[t, ~mask_con] = missing_energy
 
-        # Create charging_data
-        charging_data = ChargingData(self._charging_array, vehicles=vehicles, clusters=self._clusters)
-        return charging_data
+        # Create charging_profiles
+        charging_profiles = ChargingProfiles(self._charging_array, vehicles=vehicles, clusters=self._clusters)
+        return charging_profiles
 
     def _predefine_vars(self, vehicles: ElectricVehicles, user_params: UserParamsChargingModel):
         """Predefine variables needed for charging profile calculations."""

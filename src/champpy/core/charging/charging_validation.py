@@ -10,7 +10,7 @@ from typing import Literal, Optional
 from pydantic import ConfigDict, validate_call
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 from dataclasses import field
-from champpy.core.charging.charging_model import ChargingData
+from champpy.core.charging.charging_model import ChargingProfiles
 from champpy.utils.time_utils import TypeDays, get_week_index
 from champpy.utils.data_utils import get_plot_path
 
@@ -22,13 +22,25 @@ logger = logging.getLogger(__name__)
 
 @pydantic_dataclass
 class UserParamsChargingPlotter:
+    """User parameters to initialize :class:`ChargingPlotter`."""
+
     filename: str = "plots\\charging_plots.html"
+    """Output filename for the generated HTML plots."""
+    
     font_family: str = "Segoe UI"
-    save_plot: bool = True  # Option to control whether plots are saved to file
+    """Font family for plot text."""
+    
+    save_plot: bool = True
+    """Option to control whether plots are saved to file."""
+    
     show: bool = True
+    """Option to control whether plots are displayed in browser."""
+    
     font_size: int = 18
+    """Font size for plot text."""
+    
     rgb_color: Optional[list] = field(
-        default_factory=lambda: [  # RGB color matrix for plotting clusters
+        default_factory=lambda: [
             [0.2078, 0.4235, 0.6471],
             [0.9686, 0.8353, 0.0275],
             [0.5412, 0.7098, 0.8824],
@@ -38,14 +50,27 @@ class UserParamsChargingPlotter:
             [0.4784, 0.1098, 0.1098],
         ]
     )
-    load_temp_res: Optional[int] = 1  # Temporal resolution in hours, only relevant for load profile plot
-    clustering: Optional[bool] = (
-        False  # Option to control whether plots are created for clusters (if defined in the data)
-    )
+    """RGB color matrix for plotting clusters. Each inner list contains RGB values (0-1 range)."""
+    
+    load_temp_res: Optional[int] = 1
+    """Temporal resolution in hours, only relevant for load profile plot."""
+    
+    clustering: Optional[bool] = False
+    """Option to control whether plots are created for clusters (if defined in the data)."""
 
 
 class ChargingPlotter:
-    """Class for plotting charging characteristics."""
+    """
+    Plotter for charging profiles.
+
+    This class provides multiple plotting utilities for charging profiles,
+    including summary characteristics and load profiles.
+
+    Parameters
+    ----------
+    user_params : UserParamsChargingPlotter, optional
+        Plot configuration such as output filename, font, colors, and display/export behavior.
+    """
 
     def __init__(self, user_params: Optional[UserParamsChargingPlotter] = UserParamsChargingPlotter()):
         # Unpack user parameters
@@ -63,12 +88,21 @@ class ChargingPlotter:
         self._legend_clusters = []
         self._label_positions = []
 
-    def plot_charging_profiles(self, charge_data: ChargingData):
+    def plot_charging_profiles(self, charging_profiles: ChargingProfiles):
         """
-        Generate a combined HTML file with plots from plot_charging_char, plot_load_week.
+        Main function to generate plots of charging profiles.
+        The function calls :meth:`plot_charging_char` and :meth:`plot_load_week`
+        to create a combined HTML file.
 
-        Parameters:
-        charge_data (ChargingData): Input data for the plots.
+        Parameters
+        ----------
+        charging_profiles : :class:`~champpy.ChargingProfiles`
+            Input charging profiles that are to be visualized.
+
+        Returns
+        -------
+        None
+            The method writes/opens a combined HTML plot report depending on user settings.
         """
         logger.info("Generate plot of charging profiles")
 
@@ -77,8 +111,8 @@ class ChargingPlotter:
         self._show = False
 
         # Generate individual plots
-        fig_charging_char = self.plot_charging_char(charge_data)
-        fig_load_week = self.plot_load_week(charge_data)
+        fig_charging_char = self.plot_charging_char(charging_profiles)
+        fig_load_week = self.plot_load_week(charging_profiles)
 
         # Ensure the output_file path is absolute and properly formatted
         # Ensure the output_file has .html extension, replacing any existing extension
@@ -127,22 +161,26 @@ class ChargingPlotter:
         if self._show:
             webbrowser.open(f"file://{output_file}")
 
-    def plot_charging_char(self, charge_data: ChargingData) -> go.Figure:
+    def plot_charging_char(self, charging_profiles: ChargingProfiles) -> go.Figure:
         """
         Plot charging characteristics: daily driving consumption, daily charging hours, daily charging energy, daily connected hours.
 
-        Parameters:
-        charge_data (ChargingData): Charging data to plot.
+        Parameters
+        ----------
+        charging_profiles : :class:`~champpy.ChargingProfiles`
+            Charging data to plot.
 
-        Returns:
-        fig: Plotly figure object.
+        Returns
+        -------
+        :class:`~plotly.graph_objs.Figure`
+            Plotly figure object with charging characteristics.
         """
         logger.info("Create plot of charging characteristics")
 
         # Cluster-Handling analog zu plot_mob_char
-        if self._clustering and len(charge_data.vehicles.df.id_cluster.unique()) > 1:
-            clusters = charge_data.clusters.df["id_cluster"].tolist()
-            labels_clusters = charge_data.clusters.df["label"].tolist()
+        if self._clustering and len(charging_profiles.vehicles.df.id_cluster.unique()) > 1:
+            clusters = charging_profiles.clusters.df["id_cluster"].tolist()
+            labels_clusters = charging_profiles.clusters.df["label"].tolist()
             n_clusters = len(clusters)
         else:
             clusters = [1]
@@ -150,10 +188,10 @@ class ChargingPlotter:
             n_clusters = 1
 
         char_df_week_weekend = ChargingCharacteristics(
-            charge_data, method="mean", typedays=TypeDays(groups=[[0, 1, 2, 3, 4], [5, 6]]), clustering=self._clustering
+            charging_profiles, method="mean", typedays=TypeDays(groups=[[0, 1, 2, 3, 4], [5, 6]]), clustering=self._clustering
         ).df
         char_df_week = ChargingCharacteristics(
-            charge_data, method="mean", typedays=TypeDays(groups=[[0, 1, 2, 3, 4, 5, 6]]), clustering=self._clustering
+            charging_profiles, method="mean", typedays=TypeDays(groups=[[0, 1, 2, 3, 4, 5, 6]]), clustering=self._clustering
         ).df
 
         # Append mobility characteristics of week and weekend to one dataframe
@@ -272,32 +310,34 @@ class ChargingPlotter:
         return fig
 
     # ...existing code...
-    def plot_load_week(self, charge_data: ChargingData) -> go.Figure:
-        """Plot the charging load profile over the course of an average week based on the charging data.
-        Parameters:
+    def plot_load_week(self, charging_profiles: ChargingProfiles) -> go.Figure:
+        """
+        Plot the charging load profile over the course of an average week.
+
+        Parameters
         ----------
-        charge_data (ChargingData): Charging data to plot.
-        temp_res (float): Temporal resolution in hours for the load profile. Default is 1 hour.
-        fleet (bool): If True, the load profile is aggregated for the entire fleet.
-        clustering (bool): If True, separate load profiles are plotted for each cluster defined in the charging data. Default is False.
-        Returns:
-        ----------
-        fig: Plotly figure object.
+        charging_profiles : :class:`~champpy.ChargingProfiles`
+            Charging data to plot.
+
+        Returns
+        -------
+        :class:`~plotly.graph_objs.Figure`
+            Plotly figure object with weekly load profile.
         """
         # Unpack charging data
         logger.info("Create plot of load profile over the course of a week")
-        charge_df = charge_data.charging_timeseries.df.loc[:, ["id_vehicle", "datetime", "power_charging_kw"]]
+        charge_df = charging_profiles.charging_timeseries.df.loc[:, ["id_vehicle", "datetime", "power_charging_kw"]]
 
         # add week index
         charge_df["week_index"] = get_week_index(charge_df["datetime"], temp_res=self._temp_res)
 
-        if self._clustering and len(charge_data.vehicles.df.id_cluster.unique()) > 1:
+        if self._clustering and len(charging_profiles.vehicles.df.id_cluster.unique()) > 1:
             # Merge the cluster labels into the charge_df based on id_vehicle
             charge_df = charge_df.merge(
-                charge_data.vehicles.df[["id_vehicle", "id_cluster"]], on="id_vehicle", how="left"
+                charging_profiles.vehicles.df[["id_vehicle", "id_cluster"]], on="id_vehicle", how="left"
             )
             unique_id_cluster = charge_df["id_cluster"].unique()
-            cluster_labels = charge_data.clusters.df["label"].tolist()
+            cluster_labels = charging_profiles.clusters.df["label"].tolist()
         else:
             # If clustering is not enabled, assign all data to a single cluster without label
             charge_df["id_cluster"] = 1
@@ -482,7 +522,7 @@ class ChargingCharacteristics:
 
     Parameters:
     ----------
-    mob_data (ChargingData): Charging data instance.
+    charging_profiles (ChargingProfiles): Charging profiles instance.
     typedays (TypeDays): Define type of days. Default is weekdays and weekend.
     grouping (str): The output table can be grouped by 'none', 'vehicle', or 'day'. Default is 'none'.
     method (str): Method to determine the characteristics: 'mean', 'max', 'min'. Default is 'mean'.
@@ -498,34 +538,34 @@ class ChargingCharacteristics:
     @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def __init__(
         self,
-        charge_data: ChargingData,
+        charging_profiles: ChargingProfiles,
         typedays: TypeDays = TypeDays(groups=[[0, 1, 2, 3, 4, 5, 6]]),
         grouping: Literal["none", "vehicle", "day"] = "none",
         method: Literal["mean", "max", "min"] = "mean",
         clustering: Optional[bool] = False,
     ):
         """Initialize the ChargingCharacteristics class and calculate the characteristics based on the charging data."""
-        self.df = self._calc_charge_char(charge_data, typedays, grouping, method, clustering)
+        self.df = self._calc_charge_char(charging_profiles, typedays, grouping, method, clustering)
 
     @staticmethod
     def _calc_charge_char(
-        charge_data: ChargingData,
+        charging_profiles: ChargingProfiles,
         typedays: TypeDays,
         grouping: Literal["none", "vehicle", "day"],
         method: Literal["mean", "max", "min"],
         clustering: Optional[bool] = False,
     ) -> pd.DataFrame:
         # Prepare data once
-        charge_df = charge_data.charging_timeseries.df.copy()
+        charge_df = charging_profiles.charging_timeseries.df.copy()
         charge_df["weekday"] = charge_df["datetime"].dt.dayofweek
         charge_df["index_typeday"] = charge_df["weekday"].apply(typedays.weekday2typeday)
         charge_df["date"] = charge_df["datetime"].dt.normalize()
 
         if clustering:
             charge_df = charge_df.merge(
-                charge_data.vehicles.df[["id_vehicle", "id_cluster"]], on="id_vehicle", how="left"
+                charging_profiles.vehicles.df[["id_vehicle", "id_cluster"]], on="id_vehicle", how="left"
             )
-            unique_id_cluster = sorted(charge_data.clusters.df["id_cluster"].unique())
+            unique_id_cluster = sorted(charging_profiles.clusters.df["id_cluster"].unique())
         else:
             charge_df["id_cluster"] = 1
             unique_id_cluster = [1]
