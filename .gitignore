@@ -35,8 +35,12 @@ htmlcov/
 Thumbs.db
 
 # Data and output
-data/mob_profiles/
-data/charge_profiles/
+data/*
+!data/graphical_abstract.svg
+!data/example1/
+!data/example1/**
+!data/example2/
+!data/example2/**
 plots/*.html
 
 # Docs
