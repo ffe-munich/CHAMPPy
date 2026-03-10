@@ -1,0 +1,128 @@
+# Configuration file for the Sphinx documentation builder.
+#
+# For the full list of built-in configuration values, see the documentation:
+# https://www.sphinx-doc.org/en/master/usage/configuration.html
+
+# -- Project information -----------------------------------------------------
+# https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
+
+project = 'ChAMPPy'
+copyright = '2026, Florian Biedenbach'
+author = 'Florian Biedenbach'
+release = '1.0.0'
+
+# -- General configuration ---------------------------------------------------
+# https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
+
+import os
+import sys
+import shutil
+from pathlib import Path
+
+sys.path.insert(0, os.path.abspath("../"))
+#sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
+
+extensions = [
+    "sphinx.ext.autodoc",
+    "sphinx.ext.autosummary",
+    "sphinx.ext.napoleon",
+    "sphinx.ext.viewcode",
+    "sphinx.ext.intersphinx",
+    "sphinx_copybutton",
+    "sphinx_autodoc_typehints",
+    "myst_nb",
+]
+
+autodoc_default_options = {
+    'members': True,
+    'member-order': 'groupwise',  # Group by type: attributes/properties first, then methods
+    'undoc-members': False,
+    'private-members': False,
+}
+
+# Napoleon settings for better docstring rendering
+napoleon_use_param = True
+napoleon_use_rtype = True
+napoleon_numpy_docstring = True
+napoleon_google_docstring = False
+
+autosummary_generate = False
+
+intersphinx_mapping = {
+    'python': ('https://docs.python.org/3', None),
+    'pandas': ('https://pandas.pydata.org/docs/', None),
+    'numpy': ('https://numpy.org/doc/stable/', None),
+}
+
+templates_path = ['_templates']
+exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
+
+# MyST-NB configuration
+nb_execution_mode = "off"  # Don't execute notebooks during build
+
+# Suppress warnings for README notebook links
+suppress_warnings = ['myst.xref_missing']
+
+language = '[en]'
+
+# -- Options for HTML output -------------------------------------------------
+# https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
+
+html_theme = 'furo'
+html_static_path = ['_static']
+html_theme_options = {
+    "navigation_with_keys": True,
+}
+html_css_files = ['custom.css']
+
+
+def sync_notebooks_from_repo(app):
+    """Synchronize notebooks from repo-level notebooks/ into docs/notebooks/."""
+    repo_root = os.path.dirname(app.srcdir)
+    src_dir = os.path.join(repo_root, "notebooks")
+    dst_dir = os.path.join(app.srcdir, "notebooks")
+
+    if not os.path.isdir(src_dir):
+        return
+
+    os.makedirs(dst_dir, exist_ok=True)
+
+    src_files = {
+        f for f in os.listdir(src_dir)
+        if f.endswith(".ipynb") and (f.startswith("01_demo") or f.startswith("02_demo"))
+    }
+    dst_files = {f for f in os.listdir(dst_dir) if f.endswith(".ipynb")}
+
+    # Remove stale notebook copies
+    for stale in dst_files - src_files:
+        os.remove(os.path.join(dst_dir, stale))
+
+    # Copy/update current notebooks
+    for nb in src_files:
+        shutil.copy2(os.path.join(src_dir, nb), os.path.join(dst_dir, nb))
+
+
+def copy_static_to_docs_path(app, exception):
+    """Copy _static folder to docs/_static in the build output, including
+    assets from data/ (e.g. graphical_abstract.svg). This allows
+    <img src="docs/_static/..."> in README.md to work in both GitHub
+    (relative to repo root) and Sphinx (relative to build output).
+    """
+    if exception is None and app.builder.name == "html":
+        # Copy _static into docs/_static in build output
+        src = os.path.join(app.srcdir, "_static")
+        dst = os.path.join(app.outdir, "docs", "_static")
+        if os.path.exists(src):
+            shutil.copytree(src, dst, dirs_exist_ok=True)
+
+        # Copy graphical_abstract.svg from data/ into _static and docs/_static
+        repo_root = os.path.dirname(app.srcdir)
+        svg_src = os.path.join(repo_root, "data", "graphical_abstract.svg")
+        if os.path.exists(svg_src):
+            shutil.copy2(svg_src, os.path.join(app.outdir, "_static", "graphical_abstract.svg"))
+            shutil.copy2(svg_src, os.path.join(dst, "graphical_abstract.svg"))
+
+
+def setup(app):
+    app.connect("builder-inited", sync_notebooks_from_repo)
+    app.connect("build-finished", copy_static_to_docs_path)

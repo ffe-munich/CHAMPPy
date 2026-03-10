@@ -1,0 +1,22 @@
+/* DataFrames mit horizontalem Scrolling */
+.dataframe {
+    overflow-x: auto;
+    display: block;
+    max-width: 100%;
+}
+
+/* Optional: schönere Tabellen */
+table {
+    border-collapse: collapse;
+    width: 100%;
+}
+
+th, td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: left;
+}
+
+th {
+    background-color: #f2f2f2;
+}
