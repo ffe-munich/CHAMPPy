@@ -3,7 +3,7 @@
 import pytest
 import copy
 import pandas as pd
-from champpy.core.mobility.mobility_cleaning import MobDataCleaner
+from champpy.core.mobility.mobility_cleaning import MobProfilesCleaner
 from champpy.core.mobility.parameterization import (
     Parameterizer,
     UserParamsParameterizer,
@@ -19,7 +19,7 @@ def test_full_pipeline(mob_profiles1):
     assert not mob_profile.vehicles.df.empty
 
     # Clean mob data
-    data_cleaner = MobDataCleaner()
+    data_cleaner = MobProfilesCleaner()
     mob_profile_cleaned = data_cleaner.clean(mob_profile)
     assert mob_profile_cleaned is not None
 
