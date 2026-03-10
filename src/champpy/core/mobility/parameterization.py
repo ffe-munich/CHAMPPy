@@ -61,9 +61,7 @@ class UserParamsParameterizer:
     Default: ``0.25`` (15-minute resolution)
     """
 
-    typeday: TypeDays = field(
-        default_factory=lambda: TypeDays(groups=[[0], [1], [2], [3], [4], [5], [6]])
-    )
+    typeday: TypeDays = field(default_factory=lambda: TypeDays(groups=[[0], [1], [2], [3], [4], [5], [6]]))
     """Group weekdays using types of days (:class:`~champpy.utils.time_utils.TypeDays`).
     
     Default: ``TypeDays(groups=[[0], [1], [2], [3], [4], [5], [6]])`` (each day of the week separate)
@@ -93,7 +91,9 @@ class UserParamsParameterizer:
 
         # Warning if speed_dist_edges_duration does not start with 0
         if edges[0] != 0:
-            mssg = f"speed_dist_edges_duration should start with 0 to include also trips with short duration. Got: {edges}"
+            mssg = (
+                f"speed_dist_edges_duration should start with 0 to include also trips with short duration. Got: {edges}"
+            )
             logger.warning(mssg)
 
         # Ensure typeday is instance of TypeDays
@@ -106,25 +106,15 @@ class UserParamsParameterizer:
 class ParamsSchema(pa.DataFrameModel):
     """Schema for calculated parameters for the mobility model."""
 
-    id_params: int = pa.Field(
-        ge=0, coerce=True
-    )  # Unique identifier for the parameter set.
+    id_params: int = pa.Field(ge=0, coerce=True)  # Unique identifier for the parameter set.
     id_cluster: int = pa.Field(ge=1, coerce=True, default=0)
     percentage: float = pa.Field(ge=0.0, le=100.0, coerce=True)
     speed_max: float = pa.Field(ge=0.0, coerce=True)
     weekdays: Series[object]  # List of weekday integers (0-6)
-    transition_matrix: Series[
-        object
-    ]  # 3D numpy array: (timesteps, locations, locations)
-    speed_dist_param1: Series[
-        object
-    ]  # List of speed distribution parameters (e.g. alpha)
-    speed_dist_param2: Series[
-        object
-    ]  # List of speed distribution parameters (e.g. beta)
-    speed_dist_edges_duration: Series[
-        object
-    ]  # List of speed distribution edges in hours
+    transition_matrix: Series[object]  # 3D numpy array: (timesteps, locations, locations)
+    speed_dist_param1: Series[object]  # List of speed distribution parameters (e.g. alpha)
+    speed_dist_param2: Series[object]  # List of speed distribution parameters (e.g. beta)
+    speed_dist_edges_duration: Series[object]  # List of speed distribution edges in hours
 
     class Config:
         strict = "filter"  # remove extra columns
@@ -135,33 +125,27 @@ class ParamsSchema(pa.DataFrameModel):
     def check_transition_matrix(cls, df: pd.DataFrame) -> Series[bool]:
         """Ensure transition_matrix cells contain 3D numpy arrays with values between 0 and 1."""
         return df["transition_matrix"].apply(
-            lambda x: isinstance(x, np.ndarray)
-            and x.ndim == 3
-            and np.all((x >= 0) & (x <= 1))
+            lambda x: isinstance(x, np.ndarray) and x.ndim == 3 and np.all((x >= 0) & (x <= 1))
         )
 
     @pa.dataframe_check
     def check_weekdays(cls, df: pd.DataFrame) -> Series[bool]:
         """Ensure weekdays cells contain lists of integers 0-6."""
         return df["weekdays"].apply(
-            lambda x: isinstance(x, list)
-            and all(isinstance(d, int) and 0 <= d <= 6 for d in x)
+            lambda x: isinstance(x, list) and all(isinstance(d, int) and 0 <= d <= 6 for d in x)
         )
 
     @pa.dataframe_check
     def check_speed_dist_params(cls, df: pd.DataFrame) -> Series[bool]:
         """Ensure speed distribution parameter cells contain lists of floats."""
         bool_param2 = df["speed_dist_param2"].apply(
-            lambda x: isinstance(x, list)
-            and all(isinstance(d, (float, np.floating)) for d in x)
+            lambda x: isinstance(x, list) and all(isinstance(d, (float, np.floating)) for d in x)
         )
         bool_param1 = df["speed_dist_param1"].apply(
-            lambda x: isinstance(x, list)
-            and all(isinstance(d, (float, np.floating)) for d in x)
+            lambda x: isinstance(x, list) and all(isinstance(d, (float, np.floating)) for d in x)
         )
         bool_edges = df["speed_dist_edges_duration"].apply(
-            lambda x: isinstance(x, list)
-            and all(isinstance(d, (float, np.floating)) for d in x)
+            lambda x: isinstance(x, list) and all(isinstance(d, (float, np.floating)) for d in x)
         )
         return bool_param1 & bool_param2 & bool_edges
 
@@ -209,11 +193,7 @@ class ParamsInfo:
     labels_clusters: list[str]
     """Human-readable labels for each cluster."""
 
-    created_user: str = field(
-        default_factory=lambda: os.environ.get("USERNAME")
-        or os.environ.get("USER")
-        or "unknown"
-    )
+    created_user: str = field(default_factory=lambda: os.environ.get("USERNAME") or os.environ.get("USER") or "unknown")
     """Username who created the parameter set (default: current user)."""
 
     created_dt: pd.Timestamp = field(default_factory=pd.Timestamp.now)
@@ -353,8 +333,7 @@ class Parameterizer:
                 "weekdays": weekdays_repeated,
                 "percentage": np.zeros(number_rows),
                 "speed_max": np.zeros(number_rows),
-                "transition_matrix": [None]
-                * number_rows,  # Will be filled with 3D arrays
+                "transition_matrix": [None] * number_rows,  # Will be filled with 3D arrays
                 "speed_dist_param1": [None] * number_rows,
                 "speed_dist_param2": [None] * number_rows,
                 "speed_dist_edges_duration": [edges_float] * number_rows,
@@ -372,9 +351,7 @@ class Parameterizer:
 
     def _create_info(self, ref_profiles: MobProfiles) -> ParamsInfo:
         """Get parameter information DataFrame."""
-        mob_char = MobCharacteristics(
-            ref_profiles, typedays=TypeDays(groups=[[0, 1, 2, 3, 4, 5, 6]])
-        )
+        mob_char = MobCharacteristics(ref_profiles, typedays=TypeDays(groups=[[0, 1, 2, 3, 4, 5, 6]]))
         # Create info DataFrame
         params_info = ParamsInfo(
             id_params=0,  # TODO Placeholder, should be unique identifier
@@ -383,9 +360,7 @@ class Parameterizer:
             temp_res=self.user_params.temp_res,
             annual_km=(mob_char.df.loc[0, "daily_kilometrage"] * 365).round(3),
             locations=mob_char.df.loc[0, "locations"],
-            share_of_time_at_locations=mob_char.df.loc[
-                0, "share_of_time_at_locations"
-            ].round(3),
+            share_of_time_at_locations=mob_char.df.loc[0, "share_of_time_at_locations"].round(3),
             number_typedays=len(self.user_params.typeday.groups),
             number_clusters=ref_profiles.vehicles.df["id_cluster"].nunique(),
             labels_locations=ref_profiles.locations.df["label"].tolist(),
@@ -404,15 +379,9 @@ class Parameterizer:
 
         # add weekday and index columns
         temp_res = ref_profiles.logbooks.temp_res
-        ref_profiles_df_ext["weekday"] = ref_profiles_df_ext[
-            "start_dt"
-        ].dt.dayofweek  # Monday=0, Sunday=6
-        ref_profiles_df_ext["start_index"] = get_day_index(
-            ref_profiles_df_ext["start_dt"], temp_res
-        )
-        ref_profiles_df_ext["end_index"] = get_day_index(
-            ref_profiles_df_ext["end_dt"], temp_res
-        )
+        ref_profiles_df_ext["weekday"] = ref_profiles_df_ext["start_dt"].dt.dayofweek  # Monday=0, Sunday=6
+        ref_profiles_df_ext["start_index"] = get_day_index(ref_profiles_df_ext["start_dt"], temp_res)
+        ref_profiles_df_ext["end_index"] = get_day_index(ref_profiles_df_ext["end_dt"], temp_res)
 
         # Reindex locations
         ref_profiles_df_ext = self._reindex_locations(ref_profiles_df_ext)
@@ -422,34 +391,24 @@ class Parameterizer:
         for idx in track(range(number_rows), description="Parameterization:"):
             cluster = self._params_df.at[idx, "id_cluster"]
             weekdays = self._params_df.at[idx, "weekdays"]
-            logger.debug(
-                f"Calculating parameters for cluster {cluster}, weekdays {weekdays}"
-            )
+            logger.debug(f"Calculating parameters for cluster {cluster}, weekdays {weekdays}")
 
             # Filter ref_profiles for current cluster and weekdays
             mask_cluster = ref_profiles_df_ext["id_cluster"] == cluster
             mask_weekdays = ref_profiles_df_ext["weekday"].isin(weekdays)
-            ref_profiles_df_ext_filtered = ref_profiles_df_ext[
-                mask_cluster & mask_weekdays
-            ]
+            ref_profiles_df_ext_filtered = ref_profiles_df_ext[mask_cluster & mask_weekdays]
 
             # Calculate parameters for this cluster and weekdays
-            self._calc_parameters_for_idx(
-                ref_profiles_ext=ref_profiles_df_ext_filtered, idx=idx
-            )
+            self._calc_parameters_for_idx(ref_profiles_ext=ref_profiles_df_ext_filtered, idx=idx)
 
     def _calc_percentage_clusters(self, ref_profiles: MobProfiles):
         """Calculate percentage of days per cluster."""
         vehicles_df = ref_profiles.vehicles.df
-        vehicles_df["number_days"] = (
-            vehicles_df["last_day"] - vehicles_df["first_day"] + pd.Timedelta(days=1)
-        )
+        vehicles_df["number_days"] = vehicles_df["last_day"] - vehicles_df["first_day"] + pd.Timedelta(days=1)
         number_days_total = vehicles_df["number_days"].sum()
         number_days_cluster = vehicles_df.groupby("id_cluster")["number_days"].sum()
         percentage_cluster = number_days_cluster / number_days_total * 100
-        self._params_df["percentage"] = (
-            self._params_df["id_cluster"].map(percentage_cluster).values
-        )
+        self._params_df["percentage"] = self._params_df["id_cluster"].map(percentage_cluster).values
 
     def _calc_parameters_for_idx(self, ref_profiles_ext: pd.DataFrame, idx: int):
         """Calculate parameters for the parameterization."""
@@ -465,13 +424,8 @@ class Parameterizer:
         self._unique_locations = locations_sorted
 
         # Reindex locations to consecutive integers starting from 1, keep 0 as is
-        location_mapping = {
-            old_id: new_id
-            for new_id, old_id in enumerate(unique_locations_nozero, start=1)
-        }
-        ref_profiles_ext.loc[:, "location"] = (
-            ref_profiles_ext["location"].map(location_mapping).fillna(0).astype(int)
-        )
+        location_mapping = {old_id: new_id for new_id, old_id in enumerate(unique_locations_nozero, start=1)}
+        ref_profiles_ext.loc[:, "location"] = ref_profiles_ext["location"].map(location_mapping).fillna(0).astype(int)
         return ref_profiles_ext
 
     def _calc_transition_matrix(self, ref_profiles_ext: pd.DataFrame, idx: int):
@@ -490,9 +444,7 @@ class Parameterizer:
 
         # predefine transition DataFrame: alle Kombinationen von day_index, start_loc, end_loc
         combinations = list(product(unique_index_day, unique_location, unique_location))
-        transition_df = pd.DataFrame(
-            combinations, columns=["day_index", "start_loc", "end_loc"]
-        )
+        transition_df = pd.DataFrame(combinations, columns=["day_index", "start_loc", "end_loc"])
         transition_df["count"] = 0
         transition_df.set_index(["day_index", "start_loc", "end_loc"], inplace=True)
 
@@ -504,58 +456,34 @@ class Parameterizer:
         lengths = ends - starts + 1
         mask = lengths > 0
         if np.any(mask):
-            all_day_indices = np.concatenate(
-                [np.arange(s, e + 1) for s, e in zip(starts[mask], ends[mask])]
-            )
+            all_day_indices = np.concatenate([np.arange(s, e + 1) for s, e in zip(starts[mask], ends[mask])])
             all_locs = np.repeat(locs[mask], lengths[mask])
             records = np.column_stack((all_day_indices, all_locs, all_locs))
-            non_trans_df = pd.DataFrame(
-                records, columns=["day_index", "start_loc", "end_loc"]
-            )
-            non_trans_df = non_trans_df.astype(
-                {"day_index": int, "start_loc": int, "end_loc": int}
-            )
+            non_trans_df = pd.DataFrame(records, columns=["day_index", "start_loc", "end_loc"])
+            non_trans_df = non_trans_df.astype({"day_index": int, "start_loc": int, "end_loc": int})
             non_trans_df_grouped = (
-                non_trans_df.groupby(["day_index", "start_loc", "end_loc"])
-                .size()
-                .reset_index(name="count")
+                non_trans_df.groupby(["day_index", "start_loc", "end_loc"]).size().reset_index(name="count")
             )
-            non_trans_df_grouped.set_index(
-                ["day_index", "start_loc", "end_loc"], inplace=True
-            )
+            non_trans_df_grouped.set_index(["day_index", "start_loc", "end_loc"], inplace=True)
             del non_trans_df  # save memory
 
         # Determine counts of timesteps with transitions between locations: vehicledrives from one location to another
-        mask_not_first_row_of_vehicle = ref_profiles_ext[
+        mask_not_first_row_of_vehicle = ref_profiles_ext["start_dt"] != ref_profiles_ext.groupby("id_vehicle")[
             "start_dt"
-        ] != ref_profiles_ext.groupby("id_vehicle")["start_dt"].transform("min")
-        start_indexs = ref_profiles_ext.loc[
-            mask_not_first_row_of_vehicle, "start_index"
-        ].values
+        ].transform("min")
+        start_indexs = ref_profiles_ext.loc[mask_not_first_row_of_vehicle, "start_index"].values
         end_loc = ref_profiles_ext.loc[mask_not_first_row_of_vehicle, "location"].values
         start_loc = ref_profiles_ext["location"].shift(+1).values
-        start_loc = start_loc[
-            mask_not_first_row_of_vehicle
-        ]  # remove first rows of vehicles
-        trans_df = pd.DataFrame(
-            {"day_index": start_indexs, "start_loc": start_loc, "end_loc": end_loc}
-        )
+        start_loc = start_loc[mask_not_first_row_of_vehicle]  # remove first rows of vehicles
+        trans_df = pd.DataFrame({"day_index": start_indexs, "start_loc": start_loc, "end_loc": end_loc})
         trans_df = trans_df.astype({"day_index": int, "start_loc": int, "end_loc": int})
-        trans_df_grouped = (
-            trans_df.groupby(["day_index", "start_loc", "end_loc"])
-            .size()
-            .reset_index(name="count")
-        )
+        trans_df_grouped = trans_df.groupby(["day_index", "start_loc", "end_loc"]).size().reset_index(name="count")
         trans_df_grouped.set_index(["day_index", "start_loc", "end_loc"], inplace=True)
         del trans_df  # save memory
 
         # Merge counts of non-transition and transition DataFrames
-        transition_df["count"] = transition_df["count"].add(
-            non_trans_df_grouped["count"], fill_value=0
-        )
-        transition_df["count"] = transition_df["count"].add(
-            trans_df_grouped["count"], fill_value=0
-        )
+        transition_df["count"] = transition_df["count"].add(non_trans_df_grouped["count"], fill_value=0)
+        transition_df["count"] = transition_df["count"].add(trans_df_grouped["count"], fill_value=0)
         transition_df = transition_df.reset_index()
 
         # Berechne total_counts pro day_index
@@ -567,9 +495,7 @@ class Parameterizer:
         )
 
         # Calculate transition probabilities
-        transition_df["probability"] = (
-            transition_df["count"] / transition_df["total_count"]
-        )
+        transition_df["probability"] = transition_df["count"] / transition_df["total_count"]
         transition_df.fillna(0, inplace=True)
 
         # Reshape to 3D numpy array
@@ -586,9 +512,7 @@ class Parameterizer:
         """Calculate speed distribution parameters using a Beta distribution."""
 
         # Get variables
-        lb_speed_df = ref_profiles_ext[ref_profiles_ext["location"] == 0][
-            ["speed", "duration"]
-        ]
+        lb_speed_df = ref_profiles_ext[ref_profiles_ext["location"] == 0][["speed", "duration"]]
         edges_duration = self._params_df.at[idx, "speed_dist_edges_duration"]
 
         # Extract durations and speeds for different duration bins
@@ -596,9 +520,7 @@ class Parameterizer:
         for i in range(len(edges_duration) - 1):
             lower_edge = edges_duration[i]
             upper_edge = edges_duration[i + 1]
-            mask = (lb_speed_df["duration"] >= lower_edge) & (
-                lb_speed_df["duration"] < upper_edge
-            )
+            mask = (lb_speed_df["duration"] >= lower_edge) & (lb_speed_df["duration"] < upper_edge)
             speeds_binned.append(lb_speed_df.loc[mask, "speed"].values)
 
         # Normalize speeds to [0, 1] for Beta distribution fitting
@@ -652,9 +574,7 @@ class ParamsLoader:
         """
         if user_name is None:
             user_name: str = field(
-                default_factory=lambda: os.environ.get("USERNAME")
-                or os.environ.get("USER")
-                or "unknown"
+                default_factory=lambda: os.environ.get("USERNAME") or os.environ.get("USER") or "unknown"
             )
         else:
             self.user_name = user_name
@@ -728,9 +648,7 @@ class ParamsLoader:
         """Load only params DataFrame from params.parquet."""
         # Load params DataFrame
         if id_params is not None:
-            params_df = pd.read_parquet(
-                PARAMS_DIR, filters=[("id_params", "==", id_params)]
-            )
+            params_df = pd.read_parquet(PARAMS_DIR, filters=[("id_params", "==", id_params)])
         else:
             params_df = pd.read_parquet(PARAMS_DIR)
         return params_df
@@ -762,14 +680,9 @@ class ParamsLoader:
             info_df["annual_km"] = info_df["annual_km"].round(3)
             # check with the same info excluding description and created_user, created_dt
             cols_to_check = [
-                col
-                for col in info_df.columns
-                if col
-                in ["temp_res", "annual_km", "number_typedays", "number_clusters"]
+                col for col in info_df.columns if col in ["temp_res", "annual_km", "number_typedays", "number_clusters"]
             ]
-            mask_existing_info = (
-                info_df[cols_to_check] == pd.Series(vars(params.info))[cols_to_check]
-            ).all(axis=1)
+            mask_existing_info = (info_df[cols_to_check] == pd.Series(vars(params.info))[cols_to_check]).all(axis=1)
             if mask_existing_info.any():
                 id_val = info_df[mask_existing_info]["id_params"].values[0]
                 mssg = (
@@ -784,9 +697,7 @@ class ParamsLoader:
             new_id = info_df["id_params"].max() + 1
             params.info.id_params = new_id
             # append new info
-            info_df = pd.concat(
-                [info_df, pd.DataFrame([vars(params.info)])], ignore_index=True
-            )
+            info_df = pd.concat([info_df, pd.DataFrame([vars(params.info)])], ignore_index=True)
 
         # Save info DataFrame
         info_df.to_parquet(PARAMS_INFO_DIR, index=False)

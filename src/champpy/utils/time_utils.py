@@ -117,9 +117,7 @@ def get_datetime_array(
     """
     start_dt_wo_buffer = start_date.normalize()
     start_dt = start_dt_wo_buffer - pd.Timedelta(days=number_days_buffer)
-    end_dt_wo_buffer = (
-        end_date.normalize() + pd.Timedelta(days=1) - pd.Timedelta(hours=temp_res)
-    )
+    end_dt_wo_buffer = end_date.normalize() + pd.Timedelta(days=1) - pd.Timedelta(hours=temp_res)
     end_dt = end_dt_wo_buffer + pd.Timedelta(days=number_days_buffer)
     frequency = f"{temp_res}h"
     dt_array = pd.date_range(start=start_dt, end=end_dt, freq=frequency)
@@ -216,9 +214,7 @@ class TypeDays:
             logger.error(mssg)
             raise ValueError(mssg)
 
-    def weekday2typeday(
-        self, index_weekday: int | pd.Series | np.ndarray
-    ) -> int | np.ndarray:
+    def weekday2typeday(self, index_weekday: int | pd.Series | np.ndarray) -> int | np.ndarray:
         """
         Convert weekday (0=Monday,..6=Sunday) to typeday index based on groups.
 

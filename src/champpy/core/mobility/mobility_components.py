@@ -33,9 +33,7 @@ class BaseMobilityComponent(ABC):
         """Ensure subclasses define a _schema attribute."""
         super().__init_subclass__()
         if getattr(cls, "_schema", None) is None:
-            raise NotImplementedError(
-                f"{cls.__name__} must define a class attribute '_schema'"
-            )
+            raise NotImplementedError(f"{cls.__name__} must define a class attribute '_schema'")
 
     @property
     def df(self) -> pd.DataFrame:
@@ -121,9 +119,7 @@ class BaseMobilityComponent(ABC):
 
     def _check_frozen(self):
         if self._frozen:
-            raise AttributeError(
-                f"This {self.__class__.__name__} instance is frozen and cannot be modified."
-            )
+            raise AttributeError(f"This {self.__class__.__name__} instance is frozen and cannot be modified.")
 
 
 class LogbooksSchema(pa.DataFrameModel):
@@ -257,9 +253,7 @@ class Logbooks(BaseMobilityComponent):
 
         # Sorted required logbook rows based on id_vehicle and dep_dt
         if {"id_vehicle", "dep_dt"}.issubset(input_df.columns):
-            input_df = input_df.sort_values(by=["id_vehicle", "dep_dt"]).reset_index(
-                drop=True
-            )
+            input_df = input_df.sort_values(by=["id_vehicle", "dep_dt"]).reset_index(drop=True)
 
         # Add id_journey if missing
         if "id_journey" not in input_df.columns:
@@ -284,17 +278,13 @@ class Logbooks(BaseMobilityComponent):
 
     def _on_df_getter(self, output_df) -> pd.DataFrame:
         """Add duration and speed columns to output_df for the getter."""
-        duration = (
-            self._df["arr_dt"] - self._df["dep_dt"]
-        ).dt.total_seconds() / 3600  # in hours
+        duration = (self._df["arr_dt"] - self._df["dep_dt"]).dt.total_seconds() / 3600  # in hours
         speed = self._df["distance"] / duration  # in km/h
         return output_df.assign(duration=duration, speed=speed)
 
     def _on_df_setter(self):
         """Call restore_location_continuity after setting new dataframe."""
-        self._df = self._df.sort_values(by=["id_vehicle", "dep_dt"]).reset_index(
-            drop=True
-        )
+        self._df = self._df.sort_values(by=["id_vehicle", "dep_dt"]).reset_index(drop=True)
         self.restore_location_continuity()
         # Triggger event to update location labels
         self._event_on_locations.trigger(self)
@@ -342,9 +332,7 @@ class Logbooks(BaseMobilityComponent):
         existing_df = pd.concat([existing_df, prepared_df], ignore_index=True)
 
         # Sort by id_vehicle and dep_dt
-        existing_df = existing_df.sort_values(by=["id_vehicle", "dep_dt"]).reset_index(
-            drop=True
-        )
+        existing_df = existing_df.sort_values(by=["id_vehicle", "dep_dt"]).reset_index(drop=True)
 
         # use setter for validation and hooks
         self.df = existing_df
@@ -377,9 +365,7 @@ class Logbooks(BaseMobilityComponent):
 
         """
         # Update journeys using base class method
-        self._update_rows_of_df(
-            input_df, index_cols=["id_journey"], user_setter=True, prefer_input=False
-        )
+        self._update_rows_of_df(input_df, index_cols=["id_journey"], user_setter=True, prefer_input=False)
 
     @validate_call
     def delete_journeys(self, id_journey: list) -> None:
@@ -420,9 +406,7 @@ class Logbooks(BaseMobilityComponent):
         self._del_rows_of_df(mask_delete)
 
     @validate_call
-    def restore_location_continuity(
-        self, target: Literal["dep", "arr"] = "dep"
-    ) -> None:
+    def restore_location_continuity(self, target: Literal["dep", "arr"] = "dep") -> None:
         """
         Restore location continuity by overwriting either dep_loc or arr_loc.
 
@@ -577,9 +561,7 @@ class VehiclesSchema(pa.DataFrameModel):
     first_day: pa.DateTime = pa.Field(coerce=True)
     last_day: pa.DateTime = pa.Field(coerce=True)
     id_cluster: int = pa.Field(ge=1, coerce=True, default=1)
-    first_loc: Series[pd.Int64Dtype] = pa.Field(
-        ge=0, nullable=True, coerce=True, default=None
-    )
+    first_loc: Series[pd.Int64Dtype] = pa.Field(ge=0, nullable=True, coerce=True, default=None)
 
     class Config:
         strict = "filter"  # remove extra columns
@@ -732,9 +714,7 @@ class Vehicles(BaseMobilityComponent):
             mob_profiles.vehicles.update_vehicles(input_df=updated_vehicles_df)
         """
         # Update vehicles using base class method
-        self._update_rows_of_df(
-            input_df, index_cols=["id_vehicle"], user_setter=True, prefer_input=False
-        )
+        self._update_rows_of_df(input_df, index_cols=["id_vehicle"], user_setter=True, prefer_input=False)
 
     def delete_vehicles(self, id_vehicle: list) -> None:
         """Delete vehicles by vehicle ID.
@@ -822,15 +802,8 @@ class Vehicles(BaseMobilityComponent):
             return
 
         # Get first dep_loc per vehicle
-        first_loc = (
-            logbooks_df.sort_values(by=["dep_dt"])
-            .groupby("id_vehicle")
-            .first()
-            .reset_index()
-        )
-        first_loc = first_loc[["id_vehicle", "dep_loc"]].rename(
-            columns={"dep_loc": "first_loc"}
-        )
+        first_loc = logbooks_df.sort_values(by=["dep_dt"]).groupby("id_vehicle").first().reset_index()
+        first_loc = first_loc[["id_vehicle", "dep_loc"]].rename(columns={"dep_loc": "first_loc"})
 
         # Remove existing first_loc column if present to avoid _x/_y suffix
         if "first_loc" in self._df.columns:
@@ -937,9 +910,7 @@ class Clusters(BaseMobilityComponent):
         update_df = pd.DataFrame({"id_cluster": cluster_ids, "label": cluster_labels})
 
         # Update clusters DataFrame using function of base class
-        self._update_rows_of_df(
-            update_df, index_cols=["id_cluster"], user_setter=False, prefer_input=True
-        )
+        self._update_rows_of_df(update_df, index_cols=["id_cluster"], user_setter=False, prefer_input=True)
 
     def update_clusters(self, input_df: pd.DataFrame) -> None:
         """
@@ -967,9 +938,7 @@ class Clusters(BaseMobilityComponent):
             mob_profiles.clusters.update_clusters(clusters_df)
         """
         # Update clusters DataFrame using function of base class
-        self._update_rows_of_df(
-            input_df, index_cols=["id_cluster"], user_setter=False, prefer_input=False
-        )
+        self._update_rows_of_df(input_df, index_cols=["id_cluster"], user_setter=False, prefer_input=False)
 
 
 class LocationsSchema(pa.DataFrameModel):
@@ -1016,9 +985,7 @@ class Locations(BaseMobilityComponent):
 
     """
 
-    _schema = (
-        LocationsSchema  # Pandera schema for validation of the locations DataFrame
-    )
+    _schema = LocationsSchema  # Pandera schema for validation of the locations DataFrame
 
     def __init__(
         self,
@@ -1032,9 +999,7 @@ class Locations(BaseMobilityComponent):
         The parameters are described in the class docstring.
         """
         super().__init__(input_df=None)  # call base constructor
-        self.update_locations_from_logbooks_vehicles(
-            logbooks=logbooks, vehicles=vehicles
-        )
+        self.update_locations_from_logbooks_vehicles(logbooks=logbooks, vehicles=vehicles)
         self._frozen = frozen
 
     @BaseMobilityComponent.df.setter
@@ -1088,9 +1053,7 @@ class Locations(BaseMobilityComponent):
         all_locs = sorted(set(all_locs))
 
         # Create new locations DataFrame
-        new_locations_df = pd.DataFrame(
-            {"location": all_locs, "label": [f"Location {loc}" for loc in all_locs]}
-        )
+        new_locations_df = pd.DataFrame({"location": all_locs, "label": [f"Location {loc}" for loc in all_locs]})
         # Update locations DataFrame: 0 = driving, 1 = home
         new_locations_df.loc[new_locations_df["location"] == 0, "label"] = "Driving"
         new_locations_df.loc[new_locations_df["location"] == 1, "label"] = "Home"
@@ -1126,6 +1089,4 @@ class Locations(BaseMobilityComponent):
             # Apply updated labels
             mob_profiles.locations.update_locations(locations_df)
         """
-        self._update_rows_of_df(
-            input_df, index_cols=["location"], user_setter=False, prefer_input=False
-        )
+        self._update_rows_of_df(input_df, index_cols=["location"], user_setter=False, prefer_input=False)

@@ -12,9 +12,7 @@ import pytest
 
 @pytest.fixture
 def params_folder():
-    return os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "params"
-    )
+    return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "params")
 
 
 @pytest.fixture

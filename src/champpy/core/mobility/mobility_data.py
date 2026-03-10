@@ -161,9 +161,7 @@ class MobProfiles:
         self.clusters = Clusters(self.vehicles, frozen=frozen)
 
         # Initialize locations
-        self.locations = Locations(
-            logbooks=self.logbooks, vehicles=self.vehicles, frozen=frozen
-        )
+        self.locations = Locations(logbooks=self.logbooks, vehicles=self.vehicles, frozen=frozen)
 
         # set frozen after initialization
         self._frozen = frozen
@@ -171,12 +169,8 @@ class MobProfiles:
 
         # Add observers to trigger functions in logbooks and clusters on vehicle changes
         self.vehicles._event_on_logbooks.add_observer(self.vehicles.delete_vehicles)
-        self.vehicles._event_on_clusters.add_observer(
-            self.clusters.update_clusters_from_vehicles
-        )
-        self.logbooks._event_on_locations.add_observer(
-            self.locations.update_locations_from_logbooks_vehicles
-        )
+        self.vehicles._event_on_clusters.add_observer(self.clusters.update_clusters_from_vehicles)
+        self.logbooks._event_on_locations.add_observer(self.locations.update_locations_from_logbooks_vehicles)
 
     def __copy__(self):
         """Create Copy of Instance that can be called by copy.copy(obj)"""
@@ -232,9 +226,7 @@ class MobProfiles:
         new_vehicles_df = input_mob_profiles.vehicles.df
 
         # Make sure vehicle IDs and clusters are unique across both datasets
-        max_id_vehicle = (
-            self.vehicles.df["id_vehicle"].max() if not self.vehicles.df.empty else 0
-        )
+        max_id_vehicle = self.vehicles.df["id_vehicle"].max() if not self.vehicles.df.empty else 0
         new_vehicles_df["id_vehicle"] += max_id_vehicle
         new_logbooks_df["id_vehicle"] += max_id_vehicle
 
@@ -260,9 +252,7 @@ class MobProfiles:
         self.reindexing()
 
     @validate_call
-    def reindexing(
-        self, type: Literal["all", "id_journey", "id_vehicle", "id_cluster"] = "all"
-    ) -> None:
+    def reindexing(self, type: Literal["all", "id_journey", "id_vehicle", "id_cluster"] = "all") -> None:
         """
         Reindex of IDs in the MobProfiles instance (id_journey, id_vehicle, id_cluster).
 
@@ -279,43 +269,24 @@ class MobProfiles:
         if type in ["all", "id_vehicle"]:
             # Reindex vehicles based on logbooks starting from 1
             unique_vehicles = self.vehicles.df["id_vehicle"].unique()
-            reindex_map = {
-                old_id: new_id
-                for new_id, old_id in enumerate(sorted(unique_vehicles), start=1)
-            }
-            self.logbooks._df["id_vehicle"] = self.logbooks._df["id_vehicle"].map(
-                reindex_map
-            )
-            self.vehicles._df["id_vehicle"] = self.vehicles._df["id_vehicle"].map(
-                reindex_map
-            )
+            reindex_map = {old_id: new_id for new_id, old_id in enumerate(sorted(unique_vehicles), start=1)}
+            self.logbooks._df["id_vehicle"] = self.logbooks._df["id_vehicle"].map(reindex_map)
+            self.vehicles._df["id_vehicle"] = self.vehicles._df["id_vehicle"].map(reindex_map)
 
         if type in ["all", "id_cluster"]:
             # Reindex cluster starting from 1
             unique_clusters = self.vehicles.df["id_cluster"].unique()
             cluster_map = {
-                old_cluster: new_cluster
-                for new_cluster, old_cluster in enumerate(
-                    sorted(unique_clusters), start=1
-                )
+                old_cluster: new_cluster for new_cluster, old_cluster in enumerate(sorted(unique_clusters), start=1)
             }
-            self.vehicles._df["id_cluster"] = self.vehicles._df["id_cluster"].map(
-                cluster_map
-            )
-            self.clusters._df["id_cluster"] = self.clusters._df["id_cluster"].map(
-                cluster_map
-            )
+            self.vehicles._df["id_cluster"] = self.vehicles._df["id_cluster"].map(cluster_map)
+            self.clusters._df["id_cluster"] = self.clusters._df["id_cluster"].map(cluster_map)
 
         if type in ["all", "id_journey"]:
             # Reindex id_journey
             unique_journeys = self.logbooks.df["id_journey"].unique()
-            journey_map = {
-                old_id: new_id
-                for new_id, old_id in enumerate(sorted(unique_journeys), start=1)
-            }
-            self.logbooks._df["id_journey"] = self.logbooks._df["id_journey"].map(
-                journey_map
-            )
+            journey_map = {old_id: new_id for new_id, old_id in enumerate(sorted(unique_journeys), start=1)}
+            self.logbooks._df["id_journey"] = self.logbooks._df["id_journey"].map(journey_map)
 
 
 class MobProfilesExtended:
@@ -328,9 +299,7 @@ class MobProfilesExtended:
             Base MobProfiles instance.
     """
 
-    def __init__(
-        self, mob_profiles: MobProfiles, splitdays: bool = True, clustering: bool = True
-    ):
+    def __init__(self, mob_profiles: MobProfiles, splitdays: bool = True, clustering: bool = True):
 
         if not isinstance(mob_profiles, MobProfiles):
             message = "mob_profiles must be an instance of MobProfiles class."
@@ -376,9 +345,7 @@ class MobProfilesExtended:
     def df(self) -> pd.DataFrame:
         """Get a copy of the extended MobProfiles DataFrame."""
         # Calculate distance and duration
-        duration = (
-            self._df["end_dt"] - self._df["start_dt"]
-        ).dt.total_seconds() / 3600  # in hours
+        duration = (self._df["end_dt"] - self._df["start_dt"]).dt.total_seconds() / 3600  # in hours
         distance = self._df["speed"] * duration  # in km/h
         return self._df.copy().assign(duration=duration, distance=distance)
 
@@ -416,9 +383,7 @@ class MobProfilesExtended:
         # Create t_nondriver only if there are non-driver vehicles
         if n_nondriver_vehicle > 0:
             # Use first_loc if available, otherwise use default location 1
-            nondriver_locations = vehicles_df.loc[
-                mask_nondriver_vehicle, "first_loc"
-            ].astype("int64")
+            nondriver_locations = vehicles_df.loc[mask_nondriver_vehicle, "first_loc"].astype("int64")
 
             nondriver_df = pd.DataFrame(
                 {
@@ -434,9 +399,7 @@ class MobProfilesExtended:
 
         # return if all vehicles are non-drivers
         if n_nondriver_vehicle == len(vehicles_df):
-            self._df = nondriver_df.sort_values(
-                by=["id_vehicle", "start_dt"]
-            ).reset_index(drop=True)
+            self._df = nondriver_df.sort_values(by=["id_vehicle", "start_dt"]).reset_index(drop=True)
             return
 
         # Filter vehicles with journeys
@@ -453,9 +416,7 @@ class MobProfilesExtended:
                 "id_vehicle": vehicle_df_drivers["id_vehicle"],
                 "start_dt": vehicle_df_drivers["first_day"],
                 "end_dt": lb_df.dep_dt[lb_df["id_journey"].isin(first_id_track)].values,
-                "location": lb_df.dep_loc[
-                    lb_df["id_journey"].isin(first_id_track)
-                ].values,
+                "location": lb_df.dep_loc[lb_df["id_journey"].isin(first_id_track)].values,
                 "speed": 0,
             }
         )
@@ -464,13 +425,9 @@ class MobProfilesExtended:
         end_df = pd.DataFrame(
             {
                 "id_vehicle": vehicle_df_drivers["id_vehicle"],
-                "start_dt": lb_df.arr_dt[
-                    lb_df["id_journey"].isin(last_id_track)
-                ].values,
+                "start_dt": lb_df.arr_dt[lb_df["id_journey"].isin(last_id_track)].values,
                 "end_dt": vehicle_df_drivers["last_day"] + pd.Timedelta(days=1),
-                "location": lb_df.arr_loc[
-                    lb_df["id_journey"].isin(last_id_track)
-                ].values,
+                "location": lb_df.arr_loc[lb_df["id_journey"].isin(last_id_track)].values,
                 "speed": 0,
             }
         )
@@ -478,18 +435,10 @@ class MobProfilesExtended:
         # Define rows for locations between trips
         standing_df = pd.DataFrame(
             {
-                "id_vehicle": lb_df.id_vehicle[
-                    ~lb_df["id_journey"].isin(last_id_track)
-                ].values,
-                "start_dt": lb_df.arr_dt[
-                    ~lb_df["id_journey"].isin(last_id_track)
-                ].values,
-                "end_dt": lb_df.dep_dt[
-                    ~lb_df["id_journey"].isin(first_id_track)
-                ].values,
-                "location": lb_df.arr_loc[
-                    ~lb_df["id_journey"].isin(last_id_track)
-                ].values,
+                "id_vehicle": lb_df.id_vehicle[~lb_df["id_journey"].isin(last_id_track)].values,
+                "start_dt": lb_df.arr_dt[~lb_df["id_journey"].isin(last_id_track)].values,
+                "end_dt": lb_df.dep_dt[~lb_df["id_journey"].isin(first_id_track)].values,
+                "location": lb_df.arr_loc[~lb_df["id_journey"].isin(last_id_track)].values,
                 "speed": 0,
             }
         )
@@ -501,15 +450,14 @@ class MobProfilesExtended:
                 "start_dt": lb_df["dep_dt"],
                 "end_dt": lb_df["arr_dt"],
                 "location": 0,
-                "speed": lb_df["distance"]
-                / ((lb_df["arr_dt"] - lb_df["dep_dt"]).dt.total_seconds() / 3600),
+                "speed": lb_df["distance"] / ((lb_df["arr_dt"] - lb_df["dep_dt"]).dt.total_seconds() / 3600),
             }
         )
 
         # Merge dataframes
-        self._df = pd.concat(
-            [nondriver_df, start_df, standing_df, driving_df, end_df]
-        ).sort_values(by=["id_vehicle", "start_dt"])
+        self._df = pd.concat([nondriver_df, start_df, standing_df, driving_df, end_df]).sort_values(
+            by=["id_vehicle", "start_dt"]
+        )
         self._df.reset_index(drop=True, inplace=True)
 
     def _split_multi_day_rows(self, splitdays: bool) -> pd.DataFrame:
@@ -523,9 +471,7 @@ class MobProfilesExtended:
         day_start = self._df["start_dt"].dt.floor("D")
         day_end = self._df["end_dt"].dt.floor("D")
         n_days = (day_end - day_start).dt.days + 1
-        row_end_at_midnight = (
-            self._df["end_dt"].dt.time == pd.Timestamp("00:00:00").time()
-        ) & (n_days > 1)
+        row_end_at_midnight = (self._df["end_dt"].dt.time == pd.Timestamp("00:00:00").time()) & (n_days > 1)
 
         # determine days per vehicle
         group = self._df.groupby("id_vehicle")
@@ -552,13 +498,10 @@ class MobProfilesExtended:
         # New rows for constant days in the middle: vehicle is at the same location over the whole day
         n_parking_days = n_days - 2
         n_parking_days[n_parking_days < 0] = 0
-        parking_start_day = day_end[n_parking_days > 0] - pd.to_timedelta(
-            n_parking_days[n_parking_days > 0], unit="D"
-        )
+        parking_start_day = day_end[n_parking_days > 0] - pd.to_timedelta(n_parking_days[n_parking_days > 0], unit="D")
         parking_end_day = day_end[n_parking_days > 0]
         parking_days = [
-            pd.date_range(start, end, inclusive="left")
-            for start, end in zip(parking_start_day, parking_end_day)
+            pd.date_range(start, end, inclusive="left") for start, end in zip(parking_start_day, parking_end_day)
         ]
         split_mid_df = pd.DataFrame(
             {
@@ -577,14 +520,10 @@ class MobProfilesExtended:
         )
 
         # Modify t_location for the first day of multi-day row
-        self._df.loc[n_days > 1, "end_dt"] = day_start[n_days > 1] + pd.Timedelta(
-            days=1
-        )
+        self._df.loc[n_days > 1, "end_dt"] = day_start[n_days > 1] + pd.Timedelta(days=1)
 
         # Merge
-        self._df = pd.concat([self._df, split_mid_df, split_end_df]).sort_values(
-            by=["id_vehicle", "start_dt"]
-        )
+        self._df = pd.concat([self._df, split_mid_df, split_end_df]).sort_values(by=["id_vehicle", "start_dt"])
 
         # reset index
         self._df.reset_index(drop=True, inplace=True)
@@ -608,13 +547,9 @@ class MobArray:
             raise ValueError(message)
         first_day = mob_profiles.vehicles.df["first_day"].iloc[0]
         last_day = mob_profiles.vehicles.df["last_day"].iloc[0]
-        mob_profiles_ext_df = MobProfilesExtended(
-            mob_profiles=mob_profiles, splitdays=True
-        ).df
+        mob_profiles_ext_df = MobProfilesExtended(mob_profiles=mob_profiles, splitdays=True).df
         temp_res = mob_profiles.logbooks.temp_res
-        dt_array, _ = get_datetime_array(
-            start_date=first_day, end_date=last_day, temp_res=temp_res
-        )
+        dt_array, _ = get_datetime_array(start_date=first_day, end_date=last_day, temp_res=temp_res)
         # Get index in dt_array for start_dt and end_dt
         start_idx = pd.Series(
             np.searchsorted(dt_array, mob_profiles_ext_df["start_dt"].values),
@@ -631,62 +566,37 @@ class MobArray:
         self.location = np.zeros((number_steps, number_vehicles), dtype=int)
         self.speed = np.zeros((number_steps, number_vehicles), dtype=float)
         self.distance = np.zeros((number_steps, number_vehicles), dtype=float)
-        self.distance_distributed = np.zeros(
-            (number_steps, number_vehicles), dtype=float
-        )
+        self.distance_distributed = np.zeros((number_steps, number_vehicles), dtype=float)
         self.speed_distributed = np.zeros((number_steps, number_vehicles), dtype=float)
         # Extract data into 1D arrays
         all_idx = np.concatenate([np.arange(s, e) for s, e in zip(start_idx, end_idx)])
         all_id_vehicles = np.concatenate(
-            [
-                np.full(e - s, vid)
-                for vid, s, e in zip(
-                    mob_profiles_ext_df["id_vehicle"], start_idx, end_idx
-                )
-            ]
+            [np.full(e - s, vid) for vid, s, e in zip(mob_profiles_ext_df["id_vehicle"], start_idx, end_idx)]
         )
         all_locations = np.concatenate(
-            [
-                np.full(e - s, loc)
-                for loc, s, e in zip(
-                    mob_profiles_ext_df["location"], start_idx, end_idx
-                )
-            ]
+            [np.full(e - s, loc) for loc, s, e in zip(mob_profiles_ext_df["location"], start_idx, end_idx)]
         )
         all_speeds = np.concatenate(
-            [
-                np.full(e - s, spd)
-                for spd, s, e in zip(mob_profiles_ext_df["speed"], start_idx, end_idx)
-            ]
+            [np.full(e - s, spd) for spd, s, e in zip(mob_profiles_ext_df["speed"], start_idx, end_idx)]
         )
         all_distances = np.concatenate(
-            [
-                np.full(e - s, spd)
-                for spd, s, e in zip(mob_profiles_ext_df["speed"], start_idx, end_idx)
-            ]
+            [np.full(e - s, spd) for spd, s, e in zip(mob_profiles_ext_df["speed"], start_idx, end_idx)]
         )
         all_distances_distributed = np.concatenate(
             [
                 np.full(e - s, dist / (e - s) if e > s else 0)
-                for dist, s, e in zip(
-                    mob_profiles_ext_df["distance"], start_idx, end_idx
-                )
+                for dist, s, e in zip(mob_profiles_ext_df["distance"], start_idx, end_idx)
             ]
         )
         all_speeds_distributed = np.concatenate(
-            [
-                np.full(e - s, spd)
-                for spd, s, e in zip(mob_profiles_ext_df["speed"], start_idx, end_idx)
-            ]
+            [np.full(e - s, spd) for spd, s, e in zip(mob_profiles_ext_df["speed"], start_idx, end_idx)]
         )
 
         # Convert into 2D arrays
         self.location[all_idx, all_id_vehicles - 1] = all_locations
         self.speed[all_idx, all_id_vehicles - 1] = all_speeds
         self.distance[all_idx, all_id_vehicles - 1] = all_distances
-        self.distance_distributed[all_idx, all_id_vehicles - 1] = (
-            all_distances_distributed
-        )
+        self.distance_distributed[all_idx, all_id_vehicles - 1] = all_distances_distributed
         self.speed_distributed[all_idx, all_id_vehicles - 1] = all_speeds_distributed
         self.id_vehicle = np.arange(1, number_vehicles + 1)
 
