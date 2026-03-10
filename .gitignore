@@ -45,3 +45,4 @@ plots/*.html
 
 # Docs
 docs/_build/
+docs/notebooks/*.ipynb
