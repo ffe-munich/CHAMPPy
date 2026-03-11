@@ -4,11 +4,6 @@ build:
   os: ubuntu-24.04
   tools:
     python: "3.13"
-  jobs:
-    post_install:
-      # Install Git LFS and pull LFS files (needed for parquet files)
-      - git lfs install
-      - git lfs pull
 
 sphinx:
   configuration: docs/conf.py
