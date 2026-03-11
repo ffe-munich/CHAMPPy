@@ -937,13 +937,7 @@ class MobCharacteristics:
         calc_share_at_locations: bool = True,
     ):
 
-        # Save time of splitting days if all weekdays are in one group
-        if len(typedays.groups) == 1:
-            splitdays = False
-        else:
-            splitdays = True
-
-        mob_profiles_ext = parse_mob_profiles(mob_profiles, splitdays=splitdays)
+        mob_profiles_ext = parse_mob_profiles(mob_profiles, splitdays=True)
 
         if calc_share_at_locations and method != "mean":
             logger.warning('The variable <share_of_time_at_locations> can only be calculated for method = "mean".')
