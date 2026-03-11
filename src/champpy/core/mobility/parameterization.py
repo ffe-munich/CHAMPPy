@@ -351,7 +351,7 @@ class Parameterizer:
 
     def _create_info(self, ref_profiles: MobProfiles) -> ParamsInfo:
         """Get parameter information DataFrame."""
-        mob_char = MobCharacteristics(ref_profiles, typedays=TypeDays(groups=[[0, 1, 2, 3, 4, 5, 6]]))
+        mob_char = MobCharacteristics(ref_profiles, typedays=TypeDays(groups=[[0, 1, 2, 3, 4, 5, 6]]), method="mean")
         # Create info DataFrame
         params_info = ParamsInfo(
             id_params=0,  # TODO Placeholder, should be unique identifier
@@ -396,6 +396,7 @@ class Parameterizer:
             # Filter ref_profiles for current cluster and weekdays
             mask_cluster = ref_profiles_df_ext["id_cluster"] == cluster
             mask_weekdays = ref_profiles_df_ext["weekday"].isin(weekdays)
+
             ref_profiles_df_ext_filtered = ref_profiles_df_ext[mask_cluster & mask_weekdays]
 
             # Calculate parameters for this cluster and weekdays
@@ -410,7 +411,11 @@ class Parameterizer:
         percentage_cluster = number_days_cluster / number_days_total * 100
         self._params_df["percentage"] = self._params_df["id_cluster"].map(percentage_cluster).values
 
-    def _calc_parameters_for_idx(self, ref_profiles_ext: pd.DataFrame, idx: int):
+    def _calc_parameters_for_idx(
+        self,
+        ref_profiles_ext: pd.DataFrame,
+        idx: int,
+    ):
         """Calculate parameters for the parameterization."""
         self._calc_transition_matrix(ref_profiles_ext, idx)
         self._calc_speed_distribution(ref_profiles_ext, idx)
@@ -429,7 +434,21 @@ class Parameterizer:
         return ref_profiles_ext
 
     def _calc_transition_matrix(self, ref_profiles_ext: pd.DataFrame, idx: int):
-        """Calculate transition matrices for the mobility model."""
+        """Calculate transition matrices for the mobility model.
+
+        Methodological notes
+        --------------------
+        The matrix is estimated from true discrete step transitions:
+        state(t-1) -> state(t) for each vehicle.
+
+        For each valid pair we count transitions by:
+        - day_index (time-of-day step)
+        - start_loc (location at t-1)
+        - end_loc (location at t)
+
+        Then we normalize row-wise over end_loc to get probabilities for each
+        (day_index, start_loc) row.
+        """
         # Throw error if ref_profiles_ext is empty
         if ref_profiles_ext.empty:
             mssg = f"There is no data for cluster {self._params_df.at[idx, 'id_cluster']} and weekdays {self._params_df.at[idx, 'weekdays']}. Cannot calculate transition matrix."
@@ -441,62 +460,85 @@ class Parameterizer:
         unique_index_day = np.arange(int(24 / self.user_params.temp_res))
         n_steps_per_day = len(unique_index_day)
         n_locations = len(unique_location)
+        weekdays = self._params_df.at[idx, "weekdays"]
 
-        # predefine transition DataFrame: alle Kombinationen von day_index, start_loc, end_loc
-        combinations = list(product(unique_index_day, unique_location, unique_location))
-        transition_df = pd.DataFrame(combinations, columns=["day_index", "start_loc", "end_loc"])
-        transition_df["count"] = 0
-        transition_df.set_index(["day_index", "start_loc", "end_loc"], inplace=True)
-
-        # Determine counts of timesteps without transitions between locations: vehicle stays at same location
-        starts = ref_profiles_ext["start_index"].values
-        ends = ref_profiles_ext["end_index"].values - 1
-        ends[ends < 0] = n_steps_per_day - 1  # handle end index 0 as last index
-        locs = ref_profiles_ext["location"].values
+        # Build contiguous state occupancy from interval rows.
+        # end_index - 1 ensures half-open intervals [start, end) on the day grid.
+        starts = ref_profiles_ext["start_index"].to_numpy(copy=True)
+        ends = ref_profiles_ext["end_index"].to_numpy(copy=True) - 1
+        ends[ends < 0] = n_steps_per_day - 1
         lengths = ends - starts + 1
         mask = lengths > 0
-        if np.any(mask):
-            all_day_indices = np.concatenate([np.arange(s, e + 1) for s, e in zip(starts[mask], ends[mask])])
-            all_locs = np.repeat(locs[mask], lengths[mask])
-            records = np.column_stack((all_day_indices, all_locs, all_locs))
-            non_trans_df = pd.DataFrame(records, columns=["day_index", "start_loc", "end_loc"])
-            non_trans_df = non_trans_df.astype({"day_index": int, "start_loc": int, "end_loc": int})
-            non_trans_df_grouped = (
-                non_trans_df.groupby(["day_index", "start_loc", "end_loc"]).size().reset_index(name="count")
-            )
-            non_trans_df_grouped.set_index(["day_index", "start_loc", "end_loc"], inplace=True)
-            del non_trans_df  # save memory
 
-        # Determine counts of timesteps with transitions between locations: vehicledrives from one location to another
-        mask_not_first_row_of_vehicle = ref_profiles_ext["start_dt"] != ref_profiles_ext.groupby("id_vehicle")[
-            "start_dt"
-        ].transform("min")
-        start_indexs = ref_profiles_ext.loc[mask_not_first_row_of_vehicle, "start_index"].values
-        end_loc = ref_profiles_ext.loc[mask_not_first_row_of_vehicle, "location"].values
-        start_loc = ref_profiles_ext["location"].shift(+1).values
-        start_loc = start_loc[mask_not_first_row_of_vehicle]  # remove first rows of vehicles
-        trans_df = pd.DataFrame({"day_index": start_indexs, "start_loc": start_loc, "end_loc": end_loc})
-        trans_df = trans_df.astype({"day_index": int, "start_loc": int, "end_loc": int})
-        trans_df_grouped = trans_df.groupby(["day_index", "start_loc", "end_loc"]).size().reset_index(name="count")
-        trans_df_grouped.set_index(["day_index", "start_loc", "end_loc"], inplace=True)
-        del trans_df  # save memory
+        if not np.any(mask):
+            mssg = f"There are no valid timesteps for cluster {self._params_df.at[idx, 'id_cluster']} and weekdays {weekdays}. Cannot calculate transition matrix."
+            logger.error(mssg)
+            raise ValueError(mssg)
 
-        # Merge counts of non-transition and transition DataFrames
-        transition_df["count"] = transition_df["count"].add(non_trans_df_grouped["count"], fill_value=0)
-        transition_df["count"] = transition_df["count"].add(trans_df_grouped["count"], fill_value=0)
-        transition_df = transition_df.reset_index()
+        # Expand each interval row to one row per discrete time step.
+        # Result: state_df contains the location state at each (vehicle, date, day_index).
+        all_day_indices = np.concatenate([np.arange(s, e + 1) for s, e in zip(starts[mask], ends[mask])])
+        state_df = pd.DataFrame(
+            {
+                "id_vehicle": np.repeat(ref_profiles_ext.loc[mask, "id_vehicle"].to_numpy(), lengths[mask]),
+                "date": np.repeat(ref_profiles_ext.loc[mask, "start_dt"].dt.normalize().to_numpy(), lengths[mask]),
+                "weekday": np.repeat(ref_profiles_ext.loc[mask, "weekday"].to_numpy(), lengths[mask]),
+                "day_index": all_day_indices,
+                "location": np.repeat(ref_profiles_ext.loc[mask, "location"].to_numpy(), lengths[mask]),
+            }
+        )
+        state_df.sort_values(["id_vehicle", "date", "day_index"], inplace=True)
 
-        # Berechne total_counts pro day_index
-        total_counts = transition_df.groupby(["day_index", "start_loc"])["count"].sum()
-        transition_df = transition_df.merge(
-            total_counts.rename("total_count"),
-            on=["day_index", "start_loc"],
-            how="left",
+        # Previous-step columns define candidate Markov transition pairs.
+        state_df["start_loc"] = state_df.groupby("id_vehicle")["location"].shift(1)
+        state_df["prev_day_index"] = state_df.groupby("id_vehicle")["day_index"].shift(1)
+        state_df["prev_date"] = state_df.groupby("id_vehicle")["date"].shift(1)
+
+        # Accept only consecutive time-step pairs:
+        # - regular in-day step: k-1 -> k
+        # - midnight boundary: last step of previous day -> first step of next day
+        is_same_day_step = (state_df["prev_date"] == state_df["date"]) & (
+            state_df["day_index"] == state_df["prev_day_index"] + 1
+        )
+        is_midnight_step = (
+            (state_df["day_index"] == 0)
+            & (state_df["prev_day_index"] == n_steps_per_day - 1)
+            & (pd.to_datetime(state_df["prev_date"]) + pd.Timedelta(days=1) == pd.to_datetime(state_df["date"]))
+        )
+        # Keep only transitions that belong to the current weekday group (typeday row).
+        mask_valid_transition = (is_same_day_step | is_midnight_step) & state_df["weekday"].isin(weekdays)
+
+        trans_counts = (
+            state_df.loc[mask_valid_transition, ["day_index", "start_loc", "location"]]
+            .rename(columns={"location": "end_loc"})
+            .astype({"day_index": int, "start_loc": int, "end_loc": int})
+            .groupby(["day_index", "start_loc", "end_loc"])
+            .size()
+            .reset_index(name="count")
         )
 
-        # Calculate transition probabilities
-        transition_df["probability"] = transition_df["count"] / transition_df["total_count"]
-        transition_df.fillna(0, inplace=True)
+        # Build dense transition table with all combinations so output shape is fixed.
+        # Missing combinations receive count=0 and later probability=0.
+        combinations = list(product(unique_index_day, unique_location, unique_location))
+        transition_df = pd.DataFrame(combinations, columns=["day_index", "start_loc", "end_loc"])
+        transition_df = transition_df.merge(trans_counts, on=["day_index", "start_loc", "end_loc"], how="left")
+        transition_df["count"] = transition_df["count"].fillna(0)
+
+        total_counts = transition_df.groupby(["day_index", "start_loc"])["count"].sum()
+        transition_df = transition_df.merge(
+            total_counts.rename("total_count"), on=["day_index", "start_loc"], how="left"
+        )
+
+        # Row-wise normalization: P(end_loc | day_index, start_loc).
+        # For rows without observations (total_count==0), use identity fallback (stay prob = 1).
+        # This keeps the matrix numerically valid and avoids undefined transitions.
+        transition_df["probability"] = 0.0
+        mask_observed = transition_df["total_count"] > 0
+        transition_df.loc[mask_observed, "probability"] = (
+            transition_df.loc[mask_observed, "count"] / transition_df.loc[mask_observed, "total_count"]
+        )
+        mask_unobserved = ~mask_observed & (transition_df["start_loc"] == transition_df["end_loc"])
+        transition_df.loc[mask_unobserved, "probability"] = 1.0
 
         # Reshape to 3D numpy array
         tm = np.zeros((n_steps_per_day, n_locations, n_locations))
@@ -524,7 +566,7 @@ class Parameterizer:
             speeds_binned.append(lb_speed_df.loc[mask, "speed"].values)
 
         # Normalize speeds to [0, 1] for Beta distribution fitting
-        max_speed = lb_speed_df["speed"].max() * 1.1  # add 10% margin
+        max_speed = lb_speed_df["speed"].max() * 1.01  # add 1% margin
         self._params_df.at[idx, "speed_max"] = max_speed
         speeds_binned_normalized = [speeds / max_speed for speeds in speeds_binned]
 
