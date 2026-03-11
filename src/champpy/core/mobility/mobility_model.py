@@ -282,6 +282,7 @@ class MobModel:
         # Transition vectors and cumulative transition vectors for all vehicles
         trans_vecs = self._tm_array[params_idx, day_idx, loc_tminus1, :]
         cum_trans_vecs = np.cumsum(trans_vecs, axis=1)
+        cum_trans_vecs[:, -1] = 1.0
 
         # Random numbers for all vehicles
         rand_t = self._rand1_array[t, :]
@@ -338,13 +339,11 @@ class MobModel:
         Returns:
             pd.DataFrame: DataFrame containing the logbook data.
         """
-        # remove buffer from all arrays
-        self._dt_array = self._dt_array[~self._mask_buffer]
-        self._start_journey_array = self._start_journey_array[~self._mask_buffer, :]
-        self._duration_array = self._duration_array[~self._mask_buffer, :]
-        self._distance_array = self._distance_array[~self._mask_buffer, :]
-        self._location_array = self._location_array[~self._mask_buffer, :]
-        self._speed_array = self._speed_array[~self._mask_buffer, :]
+
+        # Extract first and last datetime without buffer
+        dt_no_buffer = self._dt_array[~self._mask_buffer]
+        first_step_no_buffer = dt_no_buffer[0]
+        last_step_no_buffer = dt_no_buffer[-1]
 
         # convert location idx into location IDs
         self._location_array = self.model_params.info.locations[self._location_array]
@@ -369,9 +368,24 @@ class MobModel:
         logbook_df["arr_loc"] = self._location_array[step_end_journey, cols_sorted]
         logbook_df["distance"] = self._distance_array[rows_sorted, cols_sorted]
 
+        # Remove buffer from logbook_df:
+        # Deleteing rows with arr_dt before first_step_no_buffer or dep_dt after last_step_no_buffer
+        mask_buffer_logbook = (logbook_df["arr_dt"] < first_step_no_buffer) | (
+            logbook_df["dep_dt"] > last_step_no_buffer
+        )
+        logbook_df = logbook_df[~mask_buffer_logbook].reset_index(drop=True)
+
+        # remove buffer from all arrays
+        self._dt_array = self._dt_array[~self._mask_buffer]
+        self._start_journey_array = self._start_journey_array[~self._mask_buffer, :]
+        self._duration_array = self._duration_array[~self._mask_buffer, :]
+        self._distance_array = self._distance_array[~self._mask_buffer, :]
+        self._location_array = self._location_array[~self._mask_buffer, :]
+        self._speed_array = self._speed_array[~self._mask_buffer, :]
+
         # Create vehicle DataFrame
-        first_day = self._dt_array[0].floor("D")
-        last_day = self._dt_array[-1].floor("D")
+        first_day = first_step_no_buffer.floor("D")
+        last_day = last_step_no_buffer.floor("D")
         id_cluster = self.model_params.df.id_cluster[self._index_params_array[1, :]]
         vehicle_df = pd.DataFrame(
             {
