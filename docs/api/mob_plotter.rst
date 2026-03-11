@@ -1,8 +1,8 @@
 champpy.MobPlotter
 ---------------------
 
-The :class:`~champpy.MobPlotter` can be used to visualize synthetic mobility profiles in CHAMPPy.
-Different plots are are created with the Python library :mod:`plotly` and merged in an html file. 
+The :class:`~champpy.MobPlotter` is a factory class to visualize synthetic mobility profiles in CHAMPPy.
+Different plots are are created with the Python library :mod:`plotly` and merged in a html file. 
 The :class:`~champpy.MobPlotter` can be used to analyze the generated synthetic mobility profiles and to compare different mobility profiles, e.g,, reference profiles vs. modelled profiles.
 
 The generated html file contain the following plots:
