@@ -49,18 +49,21 @@ class UserParamsCleaning:
     distance: LimitConfig = LimitConfig(min_value=0.5, min_method="delete", max_value=500.0, max_method="cap")
     """
     Distance limits configuration in kilometers. 
+    
     Default: ``LimitConfig(min_value=0.5, max_value=500.0)``
     """
 
     temp_res: float = 0.25
     """
     Temporal resolution in hours for resampling during cleaning.
+    
     Default: ``0.25`` (15-minute resolution)
     """
 
     print_summary: bool = True
     """
     Whether to print cleaning summary to logger.
+    
     Default: ``True``
     """
 
