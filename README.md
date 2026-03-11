@@ -71,7 +71,7 @@ CHAMPPy/
 <!-- docs-installation-start -->
 
 ### Prerequisites
-- Python 3.13 or higher
+- Python 3.11 or higher
 - pip
 
 ### Install from source
