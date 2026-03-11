@@ -110,4 +110,3 @@ def sync_notebooks_from_repo(app):
 
 def setup(app):
     app.connect("builder-inited", sync_notebooks_from_repo)
-    app.connect("build-finished", copy_static_to_docs_path)
