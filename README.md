@@ -5,7 +5,7 @@
 CHAMPPy (Charging and Mobility Profiles in Python) is a Python library to generate synthetic mobility and charging profiles for different types of electric vehicles including vans, trucks, busses and passanger cars. 
 
 <p align="center">
-   <img src="data/graphical_abstract.svg" width="80%" alt="Graphical Abstract">
+   <img src="https://raw.githubusercontent.com/ffe-munich/CHAMPPy/main/data/graphical_abstract.svg" width="80%" alt="Graphical Abstract">
 </p>
 
 Road transport decarbonization requires realistic charging demand models across all vehicle classes. However, many existing studies and publicly available tools focus mainly on private passenger cars, while commercial electric vehicles such as vans and trucks are often underrepresented despite their major relevance for emissions and grid impacts. CHAMPPy is an open Python package that addresses this gap by generating synthetic driving and charging profiles for different EV types, including commercial fleets. The model combines a Markov chain to represent vehicle locations over time with beta-distributed journey speeds, from which trip distances are derived, and uses dedicated algorithms to generate mobility and charging behavior. An optional clustering approach increases profile heterogeneity and is particularly useful when analyzing individual profiles.
