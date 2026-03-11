@@ -1,6 +1,10 @@
 # CHAMPPy
 
-<!-- TODO: Add Badges from https://img.shields.io -->
+[![PyPI version](https://img.shields.io/pypi/v/champpy.svg)](https://pypi.org/project/champpy/)
+[![Python versions](https://img.shields.io/pypi/pyversions/champpy.svg)](https://pypi.org/project/champpy/)
+[![PyPI downloads](https://img.shields.io/pypi/dm/champpy.svg)](https://pypi.org/project/champpy/)
+[![License](https://img.shields.io/pypi/l/champpy.svg)](https://opensource.org/licenses/MIT)
+[![Docs](https://img.shields.io/badge/docs-readthedocs-blue.svg)](https://champpy.readthedocs.io)
 
 CHAMPPy (Charging and Mobility Profiles in Python) is a Python library to generate synthetic mobility and charging profiles for different types of electric vehicles including vans, trucks, busses and passanger cars. 
 
@@ -17,9 +21,9 @@ CHAMPPy supports two workflows:
 
 ## Links
 
-* Documentation: TODO
+* Documentation: [https://champpy.readthedocs.io](https://champpy.readthedocs.io/en/latest/)
 * Source code: [https://github.com/ffe-munich/CHAMPPy](https://github.com/ffe-munich/CHAMPPy)
-* PyPI releases: TODO
+* PyPI releases: [https://pypi.org/project/champpy/](https://pypi.org/project/champpy/)
 * License: [http://opensource.org/licenses/MIT](http://opensource.org/licenses/MIT)
 
 ## Authors
