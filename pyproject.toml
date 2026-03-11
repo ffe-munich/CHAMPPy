@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "champpy"
-version = "0.1.0"
-description = "CHAMPPy - Mobility and Charging Profiles"
+version = "0.1.1"
+description = "CHAMPPy - Mobility and Charging Profiles in Python"
 authors = [{name = "Florian Biedenbach", email = "fbiedenbach@ffe.de"}]
 readme = "README.md"
 license = {text = "MIT"}
