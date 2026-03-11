@@ -3,19 +3,23 @@
 import pytest
 import copy
 import pandas as pd
-from champpy.core.mobility.mobility_cleaning import MobDataCleaner
-from champpy.core.mobility.parameterization import Parameterizer, UserParamsParameterizer
+from champpy.core.mobility.mobility_cleaning import MobProfilesCleaner
+from champpy.core.mobility.parameterization import (
+    Parameterizer,
+    UserParamsParameterizer,
+)
 from champpy.core.mobility.mobility_model import MobModel, UserParamsMobModel
 from champpy.core.mobility.mobility_validation import MobPlotter, UserParamsMobPlotter
 
+
 @pytest.mark.usefixtures("raw_logbook_df", "raw_vehicle_df")
-def test_full_pipeline(mob_data1):
-    mob_profile = mob_data1
+def test_full_pipeline(mob_profiles1):
+    mob_profile = mob_profiles1
     assert not mob_profile.logbooks.df.empty
     assert not mob_profile.vehicles.df.empty
 
     # Clean mob data
-    data_cleaner = MobDataCleaner()
+    data_cleaner = MobProfilesCleaner()
     mob_profile_cleaned = data_cleaner.clean(mob_profile)
     assert mob_profile_cleaned is not None
 
@@ -39,17 +43,12 @@ def test_full_pipeline(mob_data1):
     assert mob_profiles is not None
 
     # Validation of generated mobility profiles
-    mob_data_merged = copy.copy(mob_profile_cleaned)
-    mob_data_merged.add_mob_data(mob_profiles)
-    clusters_df = mob_data_merged.clusters.df
+    mob_profiles_merged = copy.copy(mob_profile_cleaned)
+    mob_profiles_merged.add_mob_profiles(mob_profiles)
+    clusters_df = mob_profiles_merged.clusters.df
     clusters_df.loc[clusters_df["id_cluster"] == 1, "label"] = "Ref"
     clusters_df.loc[clusters_df["id_cluster"] == 2, "label"] = "Model"
-    mob_data_merged.clusters.update_clusters(clusters_df)
-    user_params_plot = UserParamsMobPlotter(
-        filename="mobility_profiles_plot.html"
-    )
+    mob_profiles_merged.clusters.update_clusters(clusters_df)
+    user_params_plot = UserParamsMobPlotter(filename="mobility_profiles_plot.html")
     mobplot = MobPlotter(user_params_plot)
-    mobplot.plot_mob_data(mob_data_merged)
-
-
-
+    mobplot.plot_mob_profiles(mob_profiles_merged)
