@@ -174,7 +174,13 @@ class MobProfiles:
 
     def __copy__(self):
         """Create Copy of Instance that can be called by copy.copy(obj)"""
-        return MobProfiles(self.logbooks.df, self.vehicles.df)
+        mob_profiles_copy = MobProfiles(self.logbooks.df, self.vehicles.df)
+
+        # Preserve user-defined cluster and location definitions/labels in the copy
+        mob_profiles_copy.clusters.update_clusters(self.clusters.df)
+        mob_profiles_copy.locations.update_locations(self.locations.df)
+
+        return mob_profiles_copy
 
     def copy(self):
         """Create Copy of Instance"""
