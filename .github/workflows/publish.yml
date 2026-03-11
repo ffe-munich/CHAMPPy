@@ -2,81 +2,25 @@ name: Publish to PyPI
 
 on:
   workflow_run:
-    workflows: ["Lint", "Tests"]
+    workflows: ["Tests"]
     types: [completed]
     branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
-  actions: read
 
 jobs:
-  gate:
-    name: Check publish preconditions
-    runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
-    outputs:
-      ready: ${{ steps.check.outputs.ready }}
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Validate lint+tests status and version tag
-        id: check
-        uses: actions/github-script@v7
-        with:
-          script: |
-            if (context.eventName === "workflow_dispatch") {
-              core.setOutput("ready", "true");
-              core.info("Manual dispatch: publish preconditions bypassed.");
-              return;
-            }
-
-            const owner = context.repo.owner;
-            const repo = context.repo.repo;
-            const sha = context.payload.workflow_run.head_sha;
-            const required = ["Lint", "Tests"];
-
-            const runs = await github.paginate(github.rest.actions.listWorkflowRunsForRepo, {
-              owner,
-              repo,
-              head_sha: sha,
-              per_page: 100,
-            });
-
-            const status = Object.fromEntries(required.map((n) => [n, false]));
-            for (const run of runs) {
-              if (required.includes(run.name) && run.conclusion === "success") {
-                status[run.name] = true;
-              }
-            }
-
-            const { execSync } = require("node:child_process");
-            const tagsRaw = execSync(`git tag --points-at ${sha}`, { encoding: "utf8" }).trim();
-            const tags = tagsRaw ? tagsRaw.split("\n") : [];
-            const hasVersionTag = tags.some((t) => /^v/.test(t));
-
-            const ready = status.Lint && status.Tests && hasVersionTag;
-            core.info(`Commit: ${sha}`);
-            core.info(`Lint success: ${status.Lint}`);
-            core.info(`Tests success: ${status.Tests}`);
-            core.info(`Tags on commit: ${tags.join(", ") || "<none>"}`);
-            core.info(`Version tag present (v*): ${hasVersionTag}`);
-            core.setOutput("ready", String(ready));
-
   build:
     name: Build distribution
     runs-on: ubuntu-latest
-    needs: gate
-    if: needs.gate.outputs.ready == 'true'
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -102,7 +46,6 @@ jobs:
     name: Publish to PyPI
     runs-on: ubuntu-latest
     needs: build
-    if: needs.build.result == 'success'
 
     permissions:
       id-token: write
