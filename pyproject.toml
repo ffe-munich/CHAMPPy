@@ -24,7 +24,7 @@ dependencies = [
 
 keywords = ["mobility", "charging", "profiles", "markov", "electric vehicles"]
 classifiers = [
-    "Development Status :: 3 ,
+    "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
