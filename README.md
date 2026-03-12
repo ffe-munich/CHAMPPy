@@ -6,7 +6,7 @@
 [![License](https://img.shields.io/pypi/l/champpy.svg)](https://opensource.org/licenses/MIT)
 [![Docs](https://img.shields.io/badge/docs-readthedocs-blue.svg)](https://champpy.readthedocs.io)
 
-CHAMPPy (Charging and Mobility Profiles in Python) is a Python library to generate synthetic mobility and charging profiles for different types of electric vehicles (EVs) including vans 🚐, trucks 🚚, busses 🚌 and passanger cars 🚗. 
+CHAMPPy (Charging and Mobility Profiles in Python) is a Python library to generate synthetic mobility and charging profiles for different types of electric vehicles (EVs) including vans, trucks, busses and passanger cars. 
 
 <p align="center">
    <img src="https://raw.githubusercontent.com/ffe-munich/CHAMPPy/main/data/graphical_abstract.svg" width="80%" alt="Graphical Abstract">
@@ -16,8 +16,8 @@ Road transport decarbonization requires realistic charging demand models across 
 
 🛠️ CHAMPPy supports two workflows:
 
-1. **Light:** Use existing parameters to quickly generate drving and charging profiles with user-defined settings (e.g., simulation period, number of vehicles, charging power, battery capacity).
-2. **Full:** Re-parameterize the model with custom reference data (e.g., other countries, fleet compositions, or vehicle classes). Generate drving and charging profiles from your model parameters.
+1. 🚀 **Light:** Use existing parameters to quickly generate drving and charging profiles with user-defined settings (e.g., simulation period, number of vehicles, charging power, battery capacity).
+2. 🧪 **Full:** Re-parameterize the model with custom reference data (e.g. driving data for other countries, vehicle classes, or fleets). Afterwards, you can generate drving and charging profiles from your model parameters.
 
 ## Links
 
@@ -72,13 +72,13 @@ CHAMPPy/
 
 ## Installation
 
-<!-- docs-installation-start -->
+To install Champy on Windows, follow the step below. For installation on Linux/Mac, please check the [installation documentation on Read the Docs](https://champpy.readthedocs.io/en/latest/installation.html).
 
 ### Prerequisites
 - Python 3.11 or higher
 - pip
 
-### Install from source
+### Install from source on windows
 
 ```bash
 # Clone the repository
@@ -86,33 +86,27 @@ git clone https://github.com/ffe-munich/CHAMPPy.git
 cd CHAMPPy
 
 # Create a virtual environment
-python -m venv .venv
+py -m venv .venv
 
 # Activate virtual environment
-# On Windows:
 .\.venv\Scripts\activate
-# On Linux/Mac:
-source .venv/bin/activate
+
 
 # Install the package
 pip install .
 ```
 
-### Install from PyPI
+### Install from PyPI on windows
 
 ```bash
 # Create a virtual environment
-python -m venv .venv
+py -m venv .venv
 
 # Activate virtual environment
-# On Windows:
 .\.venv\Scripts\activate
-# On Linux/Mac:
-source .venv/bin/activate
 
 pip install champpy
 ```
-<!-- docs-installation-end -->
 
 <!-- sphinx-exclude-start -->
 ## Examples
