@@ -2,6 +2,7 @@ Installation
 ============
 
 Prerequisites
+-------------
 
 * Python 3.11 or higher
 * pip
@@ -9,7 +10,7 @@ Prerequisites
 Install from source
 -------------------
 
-tabs::
+.. tabs::
 
    .. group-tab:: Windows
 
@@ -31,29 +32,27 @@ tabs::
 
    .. group-tab:: Linux/Mac
 
-         .. code-block:: bash
+      .. code-block:: bash
 
-            # Clone the repository
-            git clone https://github.com/ffe-munich/CHAMPPy.git
-            cd CHAMPPy
+         # Clone the repository
+         git clone https://github.com/ffe-munich/CHAMPPy.git
+         cd CHAMPPy
 
-            # Create a virtual environment
-            # On Linux/Mac:
-            python -m venv .venv
+         # Create a virtual environment
+         python -m venv .venv
 
-            # Activate virtual environment
-            # On Linux/Mac:
-            source .venv/bin/activate
+         # Activate virtual environment
+         source .venv/bin/activate
 
-            # Install the package
-            pip install .
+         # Install the package
+         pip install .
 
 
 
 Install from PyPI
 -----------------
 
-tabs::
+.. tabs::
 
    .. group-tab:: Windows
 
