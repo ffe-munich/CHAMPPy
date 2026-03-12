@@ -16,8 +16,8 @@ Road transport decarbonization requires realistic charging demand models across 
 
 🛠️ CHAMPPy supports two workflows:
 
-1. 🚀 **Light:** Use existing parameters to quickly generate drving and charging profiles with user-defined settings (e.g., simulation period, number of vehicles, charging power, battery capacity).
-2. 🧪 **Full:** Re-parameterize the model with custom reference data (e.g. driving data for other countries, vehicle classes, or fleets). Afterwards, you can generate drving and charging profiles from your model parameters.
+1. 🚀 **Light:** Use existing parameters to quickly generate drving and charging profiles with user-defined settings (e.g., simulation period, number of vehicles, charging power, battery capacity). An example of this workflow is provided in [notebooks/01_demo_without_parameterization.ipynb](https://champpy.readthedocs.io/en/latest/notebooks/01_demo_without_parameterization.html). 
+2. 🧪 **Full:** Re-parameterize the model with custom reference data (e.g. driving data for other countries, vehicle classes, or fleets). Afterwards, you can generate drving and charging profiles from your model parameters. An example of this workflow is provided in [notebooks/02_demo_with_parameterization.ipynb](https://champpy.readthedocs.io/en/latest/notebooks/01_demo_without_parameterization.html)
 
 ## Links
 
@@ -72,7 +72,7 @@ CHAMPPy/
 
 ## Installation
 
-To install Champy on Windows, follow the step below. For installation on Linux/Mac, please check the [installation documentation on Read the Docs](https://champpy.readthedocs.io/en/latest/installation.html).
+To install CHAMPPy on Windows, follow the steps below. For installation on Linux/Mac, please check the [installation documentation](https://champpy.readthedocs.io/en/latest/installation.html).
 
 ### Prerequisites
 - Python 3.11 or higher
@@ -107,18 +107,6 @@ py -m venv .venv
 
 pip install champpy
 ```
-
-<!-- sphinx-exclude-start -->
-## Examples
-
-To get started, check out the interactive Jupyter notebooks in the `notebooks/` directory:
-
-1. **[01_demo_without_parameterization.ipynb](notebooks/01_demo_without_parameterization.ipynb)**  
-   Simple demo showing how to generate mobility and charging profiles using existing model parameters.
-
-2. **[02_demo_including_parameterization.ipynb](notebooks/02_demo_including_parameterization.ipynb)**  
-   Complete workflow including parameterization from reference data, model generation, and validation.
-<!-- sphinx-exclude-end -->
 
 
 

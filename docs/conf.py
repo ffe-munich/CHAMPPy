@@ -34,6 +34,7 @@ extensions = [
     "sphinx.ext.viewcode",
     "sphinx.ext.intersphinx",
     "sphinx_copybutton",
+    "sphinx_tabs.tabs",
     "sphinx_autodoc_typehints",
     "myst_nb",
 ]
