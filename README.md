@@ -6,18 +6,18 @@
 [![License](https://img.shields.io/pypi/l/champpy.svg)](https://opensource.org/licenses/MIT)
 [![Docs](https://img.shields.io/badge/docs-readthedocs-blue.svg)](https://champpy.readthedocs.io)
 
-CHAMPPy (Charging and Mobility Profiles in Python) is a Python library to generate synthetic mobility and charging profiles for different types of electric vehicles including vans, trucks, busses and passanger cars. 
+CHAMPPy (Charging and Mobility Profiles in Python) is a Python library to generate synthetic mobility and charging profiles for different types of electric vehicles (EVs) including vans 🚐, trucks 🚚, busses 🚌 and passanger cars 🚗. 
 
 <p align="center">
    <img src="https://raw.githubusercontent.com/ffe-munich/CHAMPPy/main/data/graphical_abstract.svg" width="80%" alt="Graphical Abstract">
 </p>
 
-Road transport decarbonization requires realistic charging demand models across all vehicle classes. However, many existing studies and publicly available tools focus mainly on private passenger cars, while commercial electric vehicles such as vans and trucks are often underrepresented despite their major relevance for emissions and grid impacts. CHAMPPy is an open Python package that addresses this gap by generating synthetic driving and charging profiles for different EV types, including commercial fleets. The model combines a Markov chain to represent vehicle locations over time with beta-distributed journey speeds, from which trip distances are derived, and uses dedicated algorithms to generate mobility and charging behavior. An optional clustering approach increases profile heterogeneity and is particularly useful when analyzing individual profiles.
+Road transport decarbonization requires realistic charging demand models across all vehicle classes. However, most existing studies and publicly available tools focus on private passenger cars. Commercial electric vehicles such as vans and trucks are often underrepresented despite their major relevance for emissions and grid impacts. CHAMPPy is an open Python package that addresses this gap by generating synthetic driving and charging profiles for different EV types, including commercial fleets. The model combines a Markov chain to represent vehicle locations over time with beta-distributed journey speeds, from which trip distances are derived, and uses dedicated algorithms to generate mobility and charging profiles. An optional clustering approach increases profile heterogeneity and is particularly useful when analyzing individual profiles.
 
-CHAMPPy supports two workflows:
+🛠️ CHAMPPy supports two workflows:
 
-1. Use existing parameters to quickly generate drving and charging profiles with user-defined settings (e.g., simulation period, number of vehicles, charging power, battery capacity).
-2. Re-parameterize the model with custom reference data (e.g., other countries, fleet compositions, or vehicle classes). Generate drving and charging profiles from your model parameters.
+1. **Light:** Use existing parameters to quickly generate drving and charging profiles with user-defined settings (e.g., simulation period, number of vehicles, charging power, battery capacity).
+2. **Full:** Re-parameterize the model with custom reference data (e.g., other countries, fleet compositions, or vehicle classes). Generate drving and charging profiles from your model parameters.
 
 ## Links
 
@@ -94,7 +94,7 @@ python -m venv .venv
 # On Linux/Mac:
 source .venv/bin/activate
 
-# Install the package in development mode
+# Install the package
 pip install .
 ```
 
@@ -117,13 +117,13 @@ pip install champpy
 <!-- sphinx-exclude-start -->
 ## Examples
 
-For detailed examples, check out the interactive Jupyter notebooks in the `notebooks/` directory:
+To get started, check out the interactive Jupyter notebooks in the `notebooks/` directory:
 
 1. **[01_demo_without_parameterization.ipynb](notebooks/01_demo_without_parameterization.ipynb)**  
    Simple demo showing how to generate mobility and charging profiles using existing model parameters.
 
 2. **[02_demo_including_parameterization.ipynb](notebooks/02_demo_including_parameterization.ipynb)**  
-   Complete workflow including parameterization from raw data, model generation, and validation.
+   Complete workflow including parameterization from reference data, model generation, and validation.
 <!-- sphinx-exclude-end -->
 
 
